@@ -1,0 +1,19 @@
+[project]
+name = "ququ-backend"
+version = "0.1.0"
+description = "QuQu FunASR 后端服务"
+requires-python = ">=3.11"
+dependencies = [
+    "flask>=3.0",
+    "flask-cors>=4.0",
+    "funasr>=1.2.7",
+    "gunicorn>=22.0",
+    "librosa>=0.11.0",
+    "numpy>=1.26",
+    "torch>=2.13.0",
+    "torchaudio>=2.11.0",
+]
+
+[tool.uv]
+# PyTorch 从 CPU-only 索引安装，节省 2-3GB
+extra-index-url = ["https://download.pytorch.org/whl/cpu"]
