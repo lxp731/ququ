@@ -57,8 +57,9 @@ jobs:
         run: pnpm run build:renderer
 
       - name: Build AppImage
-        run: npx electron-builder --linux --x64
+        run: npx electron-builder --linux --x64 --publish never
         env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           # 如果 npmmirror 在 CI 环境不可用，回退到官方源
           ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
 
