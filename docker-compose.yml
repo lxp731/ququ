@@ -1,0 +1,28 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    image: ququ-backend:latest
+    container_name: ququ-backend
+    ports:
+      - "127.0.0.1:8000:8000"
+    volumes:
+      # 挂载主机模型缓存目录，避免重复下载（~1.2GB）
+      - ${HOME}/.cache/modelscope:/models
+    environment:
+      - MODELSCOPE_CACHE=/models
+      - OMP_NUM_THREADS=4
+      - DAMO_ROOT=/models/hub/damo
+      - http_proxy=
+      - https_proxy=
+      - HTTP_PROXY=
+      - HTTPS_PROXY=
+    restart: unless-stopped
+    mem_limit: 4g
+    healthcheck:
+      test: ["CMD-SHELL", "curl -f http://localhost:8000/health || exit 1"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 120s
