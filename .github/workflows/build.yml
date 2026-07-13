@@ -8,6 +8,9 @@ on:
     branches: [main]        # PR 合入 main 前检查构建是否通过
   workflow_dispatch:        # 允许手动触发
 
+permissions:
+  contents: write   # 允许创建 Release 和上传文件
+
 jobs:
   build-appimage:
     runs-on: ubuntu-latest
@@ -124,6 +127,6 @@ jobs:
             dist/checksums.txt
           draft: false
           prerelease: false
-          generateReleaseNotes: true
+          generate_release_notes: true
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
