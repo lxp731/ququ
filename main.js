@@ -60,10 +60,10 @@ function setupProductionPath() {
       '/usr/local/opt/python@3.10/bin',
       '/usr/local/opt/python@3.9/bin'
     ];
-    
+
     const currentPath = process.env.PATH || '';
     const pathsToAdd = commonPaths.filter(p => !currentPath.includes(p));
-    
+
     if (pathsToAdd.length > 0) {
       const newPath = `${currentPath}:${pathsToAdd.join(':')}`;
       process.env.PATH = newPath;
@@ -73,6 +73,33 @@ function setupProductionPath() {
       });
     } else {
       logger.info('PATH无需更新，所有路径已存在');
+    }
+  } else if (process.platform === 'linux' && process.env.NODE_ENV !== 'development') {
+    // Linux平台的Python路径设置 (Arch/Debian/Fedora等)
+    const commonPaths = [
+      '/usr/local/bin',
+      '/usr/bin',
+      '/bin',
+      '/usr/sbin',
+      '/sbin',
+      // Arch/Manjaro/CachyOS 常见 Python 路径
+      '/opt/conda/bin',
+      '/home/' + require('os').userInfo().username + '/.local/bin',
+    ];
+
+    // Linux 下 PATH 通常已经包含 /usr/bin，确保核心路径都在
+    const currentPath = process.env.PATH || '';
+    const pathsToAdd = commonPaths.filter(p => !currentPath.includes(p));
+
+    if (pathsToAdd.length > 0) {
+      const newPath = `${currentPath}:${pathsToAdd.join(':')}`;
+      process.env.PATH = newPath;
+      logger.info('Linux PATH已更新', {
+        添加的路径: pathsToAdd,
+        新PATH: newPath
+      });
+    } else {
+      logger.info('Linux PATH无需更新');
     }
   } else if (process.platform === 'win32' && process.env.NODE_ENV !== 'development') {
     // Windows平台的Python路径设置

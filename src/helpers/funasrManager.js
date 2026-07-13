@@ -862,13 +862,14 @@ class FunASRManager {
       }
     }
 
-    // 如果嵌入式Python不可用，在开发模式下回退到系统Python
-    if (process.env.NODE_ENV === "development") {
-      this.logger.warn && this.logger.warn('开发模式：回退到系统Python');
+    // 如果嵌入式Python不可用，在开发模式或Linux下回退到系统Python
+    // Linux 用户通常安装了系统 Python，允许直接使用以减小包体积
+    if (process.env.NODE_ENV === "development" || process.platform === "linux") {
+      this.logger.warn && this.logger.warn('回退到系统Python');
       return await this.findPythonExecutableWithFallback();
     }
 
-    // 生产模式下不回退，确保完全隔离
+    // macOS/Windows 生产模式下不回退，确保完全隔离
     throw new Error(
       "嵌入式Python环境不可用。请重新安装应用或运行构建脚本准备Python环境。"
     );

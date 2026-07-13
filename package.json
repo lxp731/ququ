@@ -24,6 +24,9 @@
     "build:win": "electron-builder --win",
     "prebuild:linux": "npm run prepare:python:embedded && npm run build:renderer",
     "build:linux": "electron-builder --linux",
+    "prebuild:linux:light": "npm run build:renderer",
+    "build:linux:light": "electron-builder --linux",
+    "pack:linux": "npm run build:renderer && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --linux --dir",
     "pack": "npm run build:renderer && CSC_IDENTITY_AUTO_DISCOVERY=false electron-builder --dir",
     "dist": "npm run prepare:python:embedded && npm run build:renderer && electron-builder",
     "lint": "cd src && eslint .",
@@ -155,7 +158,16 @@
     },
     "linux": {
       "icon": "assets/icon.png",
-      "category": "Office"
+      "category": "Office",
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": ["x64"]
+        }
+      ],
+      "maintainer": "yan5xu <lueco.x@gmail.com>",
+      "synopsis": "蛐蛐 - 中文语音输入工具",
+      "description": "开源免费的 Wispr Flow 替代方案，基于 FunASR 本地语音识别和可配置 AI 模型的语音转文字桌面应用。"
     }
   }
 }

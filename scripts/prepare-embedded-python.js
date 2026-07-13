@@ -76,11 +76,28 @@ class EmbeddedPythonBuilder {
 
   async downloadPythonRuntime() {
     const arch = process.arch === 'arm64' ? 'aarch64' : 'x86_64';
-    const filename = `cpython-${this.pythonVersion}+${this.buildDate}-${arch}-apple-darwin-install_only.tar.gz`;
+
+    // 根据平台确定下载文件名
+    let platformTarget;
+    switch (process.platform) {
+      case 'darwin':
+        platformTarget = 'apple-darwin';
+        break;
+      case 'linux':
+        platformTarget = 'unknown-linux-gnu';
+        break;
+      case 'win32':
+        platformTarget = 'pc-windows-msvc-shared';
+        break;
+      default:
+        throw new Error(`不支持的平台: ${process.platform}`);
+    }
+
+    const filename = `cpython-${this.pythonVersion}+${this.buildDate}-${arch}-${platformTarget}-install_only.tar.gz`;
     const url = `https://github.com/indygreg/python-build-standalone/releases/download/${this.buildDate}/${filename}`;
     const tarPath = path.join(this.pythonDir, 'python.tar.gz');
 
-    console.log(`📥 下载Python运行时 (${arch})...`);
+    console.log(`📥 下载Python运行时 (${platformTarget}, ${arch})...`);
     console.log(`URL: ${url}`);
 
     await this.downloadFile(url, tarPath);

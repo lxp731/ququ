@@ -120,7 +120,7 @@ source .venv/bin/activate  # Linux/macOS
 # .venv\Scripts\activate   # Windows
 
 # 4. 安装 Python 依赖
-pip install funasr modelscope torch torchaudio librosa numpy
+pip install funasr modelscope torch torchaudio librosa numpy  # 虚拟环境内无需 --user
 
 # 5. 下载 FunASR 模型
 python download_models.py
@@ -200,6 +200,80 @@ uv sync  # 会自动下载 Python 3.11
 - **权限问题**: 在某些系统上可能需要使用 `--user` 参数安装Python包
 - **网络问题**: 首次运行时需要下载FunASR模型，请确保网络连接正常
 - **模型路径**: 模型默认下载到 `~/.cache/modelscope/` 目录
+
+## 📦 构建与打包
+
+除了 `pnpm run dev` 开发模式外，项目支持将应用打包为独立可执行文件，方便分发和日常使用。
+
+### 打包命令速览
+
+| 命令 | 说明 |
+|------|------|
+| `pnpm run pack` | 打包为解包目录（不嵌入 Python，用于调试） |
+| `pnpm run dist` | 完整打包（嵌入 Python 运行时，体积大但便携） |
+| `pnpm run build:mac` | macOS 完整打包（dmg） |
+| `pnpm run build:win` | Windows 完整打包（exe/nsis） |
+| `pnpm run build:linux` | Linux 完整打包（AppImage，嵌入 Python，约 2-3GB） |
+| `pnpm run build:linux:light` | Linux 轻量打包（AppImage，不嵌入 Python，约 120MB） |
+| `pnpm run pack:linux` | Linux 解包目录（不嵌入 Python，用于调试） |
+
+### Linux 轻量打包（推荐用于 Arch/Manjaro）
+
+轻量打包不嵌入 Python 运行时，AppImage 体积约 **120MB**。目标机器需要自行准备 Python 环境：
+
+```bash
+# 1. 构建前端 + 打包 AppImage
+pnpm run build:linux:light
+
+# 2. 产物位于 dist/ 目录
+ls dist/蛐蛐-1.0.0.AppImage
+```
+
+在目标机器上首次使用前，需要安装 Python 依赖。**推荐使用用户级安装（不污染系统环境）**：
+
+```bash
+# 1. 安装 Python（Arch 自带，一般只需装 pip）
+sudo pacman -S python python-pip
+
+# 2. 用户级安装 Python 依赖（装到 ~/.local/，不需要 sudo，不碰系统包）
+pip install --user funasr modelscope torch torchaudio librosa numpy
+
+# 3. 下载 FunASR 模型
+python download_models.py
+
+# 4. 直接运行 AppImage
+chmod +x 蛐蛐-1.0.0.AppImage
+./蛐蛐-1.0.0.AppImage
+```
+
+> **为什么用 `--user`？**  
+> 现代 Linux 发行版（Arch、Debian 12+、Ubuntu 23.04+ 等）受 [PEP 668](https://peps.python.org/pep-0668/) 保护，禁止直接 `pip install` 到系统 Python 环境，必须加 `--break-system-packages`。  
+> `pip install --user` 会将包安装到 `~/.local/lib/python3.x/site-packages/`，是**用户级隔离**，系统 `python3` 可以直接 `import`，既符合规范又不污染全局环境。  
+> 如果你偏好虚拟环境，也可以用 `uv` 或 `venv` 管理依赖，但 AppImage 默认调用系统 `python3`，需要确保它能找到 funasr。
+
+### Linux 完整打包（完全便携）
+
+完整打包会下载独立的 Python 运行时和 PyTorch 等全部依赖并嵌入 AppImage，**体积约 2-3GB**，但无需目标机器安装任何 Python 环境：
+
+```bash
+pnpm run build:linux
+```
+
+### 其他平台
+
+```bash
+# macOS（需在 macOS 上构建）
+pnpm run build:mac
+
+# Windows（需在 Windows 上构建）
+pnpm run build:win
+
+# 仅解包不打包安装包（所有平台通用，用于调试）
+pnpm run pack
+# 产物在 dist/linux-unpacked/ (或 mac/win-unpacked)，直接运行其中的可执行文件
+```
+
+> **说明**：`build:linux:light`、`pack:linux`、`pack` 等轻量/解包命令不会嵌入 Python。使用这些产物时，应用会自动尝试查找系统 Python；如果找不到或缺少 funasr 依赖，语音识别功能将不可用，但 UI 界面仍可正常打开和配置。
 
 ## 🛠️ 技术栈
 
