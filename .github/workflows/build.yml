@@ -76,8 +76,7 @@ jobs:
             exit 1
           fi
           VERSION=$(node -p "require('./package.json').version")
-          SHORT_SHA=$(git rev-parse --short HEAD)
-          NEW_NAME="QuQu-${VERSION}-${SHORT_SHA}.AppImage"
+          NEW_NAME="QuQu-${VERSION}.AppImage"
           mv "$ARTIFACT" "dist/${NEW_NAME}"
           echo "artifact_name=${NEW_NAME}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
