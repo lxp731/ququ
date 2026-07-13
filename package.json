@@ -4,6 +4,7 @@
   "description": " 蛐蛐-基于FunASR和可配置AI模型的中文优化语音转文字应用",
   "main": "main.js",
   "private": true,
+  "packageManager": "pnpm@9.15.0",
   "scripts": {
     "start": "electron .",
     "dev": "concurrently -k -r \"npm:dev:renderer\" \"npm:dev:main\"",
