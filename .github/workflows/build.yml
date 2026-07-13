@@ -1,0 +1,121 @@
+name: Build & Release
+
+on:
+  push:
+    tags:
+      - 'v*'               # 推送 tag (如 v1.0.0) 时触发正式发布
+  pull_request:
+    branches: [main]        # PR 合入 main 前检查构建是否通过
+  workflow_dispatch:        # 允许手动触发
+
+jobs:
+  build-appimage:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Install pnpm
+        uses: pnpm/action-setup@v4
+        with:
+          version: '9'
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends \
+            python3 \
+            python3-pip \
+            libfuse2 \
+            rpm
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install Node.js dependencies
+        run: pnpm install --frozen-lockfile
+
+      - name: Build renderer
+        run: pnpm run build:renderer
+
+      - name: Build AppImage
+        run: npx electron-builder --linux --x64
+        env:
+          # 如果 npmmirror 在 CI 环境不可用，回退到官方源
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+
+      - name: Rename AppImage
+        id: artifact
+        run: |
+          ARTIFACT=$(ls dist/*.AppImage 2>/dev/null || echo "")
+          if [ -z "$ARTIFACT" ]; then
+            echo "Error: AppImage not found"
+            ls -la dist/ || true
+            exit 1
+          fi
+          VERSION=$(node -p "require('./package.json').version")
+          SHORT_SHA=$(git rev-parse --short HEAD)
+          NEW_NAME="QuQu-${VERSION}-${SHORT_SHA}.AppImage"
+          mv "$ARTIFACT" "dist/${NEW_NAME}"
+          echo "artifact_name=${NEW_NAME}" >> "$GITHUB_OUTPUT"
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Upload AppImage artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: QuQu-AppImage
+          path: dist/QuQu-*.AppImage
+          retention-days: 7
+
+      - name: Generate SHA256 checksum
+        run: |
+          cd dist
+          sha256sum *.AppImage > checksums.txt
+
+      - name: Create / Update GitHub Release
+        if: startsWith(github.ref, 'refs/tags/v')
+        uses: softprops/action-gh-release@v2
+        with:
+          name: "QuQu ${{ steps.artifact.outputs.version }}"
+          body: |
+            ## 🐛 蛐蛐 QuQu ${{ steps.artifact.outputs.version }}
+
+            ### 📦 下载
+            | 文件 | 说明 |
+            |------|------|
+            | `QuQu-*.AppImage` | Linux AppImage (轻量版，约 120MB) |
+
+            ### ⚙️ 使用前准备
+            轻量版 AppImage 不嵌入 Python 运行时，首次使用需安装依赖：
+
+            ```bash
+            # 安装 Python 依赖到用户目录
+            pip install --user funasr modelscope torch torchaudio librosa numpy
+
+            # 下载语音识别模型
+            python download_models.py
+            ```
+
+            ### 🔑 校验
+            详见 `checksums.txt`
+
+            🤖 Generated with [Claude Code](https://claude.com/claude-code)
+          files: |
+            dist/QuQu-*.AppImage
+            dist/checksums.txt
+          draft: false
+          prerelease: false
+          generateReleaseNotes: true
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
