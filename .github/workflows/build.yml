@@ -3,13 +3,13 @@ name: Build & Release
 on:
   push:
     tags:
-      - 'v*'               # 推送 tag (如 v1.0.0) 时触发正式发布
+      - 'v*'
   pull_request:
-    branches: [main]        # PR 合入 main 前检查构建是否通过
-  workflow_dispatch:        # 允许手动触发
+    branches: [main]
+  workflow_dispatch:
 
 permissions:
-  contents: write   # 允许创建 Release 和上传文件
+  contents: write
 
 jobs:
   build-appimage:
@@ -29,55 +29,43 @@ jobs:
           corepack enable
           corepack prepare pnpm@9 --activate
 
-      - name: Debug workspace config
-        run: |
-          echo "=== pnpm-workspace.yaml ==="
-          cat pnpm-workspace.yaml
-          echo "=== pnpm version ==="
-          pnpm --version
-
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends \
-            python3 \
-            python3-pip \
-            libfuse2 \
-            rpm
+          sudo apt-get install -y --no-install-recommends libfuse2 rpm
 
       - name: Cache pnpm store
         uses: actions/cache@v4
         with:
           path: ~/.local/share/pnpm/store
-          key: ${{ runner.os }}-pnpm-${{ hashFiles('pnpm-lock.yaml') }}
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
           restore-keys: |
             ${{ runner.os }}-pnpm-
 
       - name: Install Node.js dependencies
-        run: pnpm install --frozen-lockfile
+        run: cd frontend && pnpm install --frozen-lockfile
 
       - name: Build renderer
-        run: pnpm run build:renderer
+        run: cd frontend && pnpm run build:renderer
 
       - name: Build AppImage
-        run: npx electron-builder --linux --x64 --publish never
+        run: cd frontend && npx electron-builder --linux --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-          # 如果 npmmirror 在 CI 环境不可用，回退到官方源
           ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
 
       - name: Rename AppImage
         id: artifact
         run: |
-          ARTIFACT=$(ls dist/*.AppImage 2>/dev/null || echo "")
+          ARTIFACT=$(ls frontend/dist/*.AppImage 2>/dev/null || echo "")
           if [ -z "$ARTIFACT" ]; then
             echo "Error: AppImage not found"
-            ls -la dist/ || true
+            ls -la frontend/dist/ || true
             exit 1
           fi
-          VERSION=$(node -p "require('./package.json').version")
+          VERSION=$(node -p "require('./frontend/package.json').version")
           NEW_NAME="QuQu-${VERSION}.AppImage"
-          mv "$ARTIFACT" "dist/${NEW_NAME}"
+          mv "$ARTIFACT" "frontend/dist/${NEW_NAME}"
           echo "artifact_name=${NEW_NAME}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
@@ -85,12 +73,12 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: QuQu-AppImage
-          path: dist/QuQu-*.AppImage
+          path: frontend/dist/QuQu-*.AppImage
           retention-days: 7
 
       - name: Generate SHA256 checksum
         run: |
-          cd dist
+          cd frontend/dist
           sha256sum *.AppImage > checksums.txt
 
       - name: Create / Update GitHub Release
@@ -99,31 +87,42 @@ jobs:
         with:
           name: "QuQu ${{ steps.artifact.outputs.version }}"
           body: |
-            ## 🐛 蛐蛐 QuQu ${{ steps.artifact.outputs.version }}
+            ## 蛐蛐 QuQu ${{ steps.artifact.outputs.version }}
 
-            ### 📦 下载
+            ### 下载
             | 文件 | 说明 |
             |------|------|
-            | `QuQu-*.AppImage` | Linux AppImage (轻量版，约 120MB) |
+            | `QuQu-*.AppImage` | Linux AppImage（~120MB，不含 Python） |
 
-            ### ⚙️ 使用前准备
-            轻量版 AppImage 不嵌入 Python 运行时，首次使用需安装依赖：
+            ### 使用前准备（容器化后端）
 
             ```bash
-            # 安装 Python 依赖到用户目录
-            pip install --user funasr modelscope torch torchaudio librosa numpy
+            # 1. 安装 Podman
+            # Arch: sudo pacman -S podman
+            # Ubuntu: sudo apt install podman
+            # macOS: brew install podman && podman machine init && podman machine start
 
-            # 下载语音识别模型
-            python download_models.py
+            # 2. 克隆仓库获取 compose 文件
+            git clone https://github.com/lxp731/ququ.git
+            cd ququ
+
+            # 3. 构建并启动后端容器
+            podman compose up -d
+
+            # 4. 首次运行会自动下载模型（~1.2GB），等待就绪
+            podman compose logs -f
+
+            # 5. 运行 AppImage
+            ./QuQu-${{ steps.artifact.outputs.version }}.AppImage
             ```
 
-            ### 🔑 校验
+            ### 校验
             详见 `checksums.txt`
 
-            🤖 Generated with [Claude Code](https://claude.com/claude-code)
+            Generated with [Claude Code](https://claude.com/claude-code)
           files: |
-            dist/QuQu-*.AppImage
-            dist/checksums.txt
+            frontend/dist/QuQu-*.AppImage
+            frontend/dist/checksums.txt
           draft: false
           prerelease: false
           generate_release_notes: true

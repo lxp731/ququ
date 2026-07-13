@@ -152,4 +152,6 @@ temp/
 .gyp
 .gyprc
 
-python
+# Docker
+docker-compose.override.yml
+
