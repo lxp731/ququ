@@ -18,7 +18,7 @@ class WindowManager {
     if (IS_DEV) {
       w.loadURL(devUrl);
     } else {
-      w.loadFile(path.join(__dirname, '..', '..', 'dist', 'src', prodPath), query ? { query } : undefined);
+      w.loadFile(path.join(__dirname, '..', '..', 'dist', prodPath), query ? { query } : undefined);
     }
   }
 

@@ -22,9 +22,9 @@ export default defineConfig({
     chunkSizeWarningLimit: 1000,
     rollupOptions: {
       input: {
-        main: path.resolve(__dirname, 'src', 'index.html'),
-        history: path.resolve(__dirname, 'src', 'history.html'),
-        settings: path.resolve(__dirname, 'src', 'settings.html'),
+        main: path.resolve(__dirname, 'index.html'),
+        history: path.resolve(__dirname, 'history.html'),
+        settings: path.resolve(__dirname, 'settings.html'),
       },
       output: {
         manualChunks: {
