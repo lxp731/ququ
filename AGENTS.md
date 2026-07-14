@@ -59,4 +59,4 @@ ququ/
 
 - 不需要在主机上安装 Python 或 FunASR —— 一切在容器中
 - 需要 Podman 或 Docker 用于后端容器
-- AppImage ~120MB（不含 Python），容器镜像 ~2GB（CPU-only PyTorch）
+- AppImage ~200MB（不含 Python），容器镜像 ~2GB（CPU-only PyTorch）
