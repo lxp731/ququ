@@ -5,8 +5,8 @@
 **开源免费的 Wispr Flow 替代方案 | 为中文而生的下一代智能语音工作流**
 
 <img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg" alt="License">
-<img src="https://img.shields.io/badge/platform-macOS%20%7C%20Windows%20%7C%20Linux-lightgrey" alt="Platform">
-<img src="https://img.shields.io/badge/release-v1.0.0-brightgreen" alt="Release">
+<img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey" alt="Platform">
+<img src="https://img.shields.io/badge/release-v1.1.1-brightgreen" alt="Release">
 <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome">
 
 </div>
@@ -80,13 +80,17 @@ pnpm run dev
 ```
 
 #### 生产模式（AppImage）
-
+1. Arch 系用户
+    ```bash
+    yay -S ququ-bin
+    ```
+2. 其他用户
 从 [Releases](https://github.com/lxp731/ququ/releases) 下载最新 AppImage，确保容器已启动后直接运行：
 
-```bash
-chmod +x QuQu-1.0.0.AppImage
-./QuQu-1.0.0.AppImage
-```
+    ```bash
+    chmod +x QuQu-1.0.0.AppImage
+    ./QuQu-1.0.0.AppImage
+    ```
 
 ### 4. 配置 AI 模型（可选）
 
@@ -137,26 +141,6 @@ podman logs -f ququ-backend # 查看日志
 | `/status` | GET | 模型状态 |
 | `/transcribe` | POST | 上传音频（multipart/form-data），返回转录文本 |
 | `/stats` | GET | 性能统计 |
-
----
-
-## 构建与打包
-
-### AppImage
-
-```bash
-cd frontend
-pnpm install
-pnpm run build:linux
-# 产物：dist/蛐蛐-1.0.0.AppImage（~120MB，不含 Python）
-```
-
-### 容器镜像
-
-```bash
-podman compose build
-# 镜像：ququ-backend:latest（~3GB，含 CPU-only PyTorch + FunASR）
-```
 
 ---
 
