@@ -1,5 +1,27 @@
 const { app, globalShortcut, BrowserWindow } = require('electron');
+const { spawn } = require('child_process');
 const path = require('path');
+
+// 启动 ydotoold 守护进程（Wayland 键盘模拟）
+function ensureYdotoolDaemon() {
+  if (process.platform !== 'linux') return;
+  const sock = '/run/user/' + process.getuid() + '/.ydotool_socket';
+  const { execSync } = require('child_process');
+  const fs = require('fs');
+  try {
+    execSync('pgrep -x ydotoold', { stdio: 'ignore' });
+    return; // 已在运行
+  } catch {}
+  // 清理僵尸 socket
+  try { fs.unlinkSync(sock); } catch {}
+  // 后台启动 daemon
+  try {
+    spawn('ydotoold', [], { detached: true, stdio: 'ignore' }).unref();
+  } catch (e) {
+    console.log('[main] ydotoold 启动失败:', e.message);
+  }
+}
+ensureYdotoolDaemon();
 
 const LogManager = require('./src/helpers/logManager');
 const EnvironmentManager = require('./src/helpers/environment');

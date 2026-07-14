@@ -1,13 +1,33 @@
 const { clipboard } = require('electron');
-const { spawn } = require('child_process');
+const { spawn, execSync } = require('child_process');
+const fs = require('fs');
 
 class ClipboardManager {
   constructor(logger) {
     this.logger = logger;
+    this._pasteCmd = null; // 缓存的 paste 命令
   }
 
   _log(msg, data) {
     try { this.logger?.info(msg, data); } catch (e) { if (e.code !== 'EPIPE') console.log(msg); }
+  }
+
+  // 检测可用的粘贴工具，返回可用列表（逐个尝试）
+  _detectPasteTools() {
+    if (this._pasteCmd) return this._pasteCmd;
+    const tools = [];
+    // ydotool (Wayland/X11) — 需要 ydotoold 真正在运行
+    try {
+      execSync('pgrep -x ydotoold', { stdio: 'ignore' });
+      tools.push({ name: 'ydotool', paste: () => spawn('ydotool', ['key', '29:1', '47:1', '47:0', '29:0']) });
+    } catch {}
+    // wtype (Wayland native)
+    try { execSync('which wtype', { stdio: 'ignore' }); tools.push({ name: 'wtype', paste: () => spawn('wtype', ['-M', 'ctrl', 'v', '-m', 'ctrl']) }); } catch {}
+    // xdotool (X11/XWayland)
+    try { execSync('which xdotool', { stdio: 'ignore' }); tools.push({ name: 'xdotool', paste: () => spawn('xdotool', ['key', '--clearmodifiers', 'ctrl+v']) }); } catch {}
+    this._pasteCmd = tools;
+    this._log('📋 可用粘贴工具: ' + tools.map(t => t.name).join(', ') || '无');
+    return tools;
   }
 
   async copyText(text) {
@@ -39,14 +59,46 @@ class ClipboardManager {
   }
 
   _pasteLinux() {
-    return new Promise((resolve, reject) => {
-      // 先等剪贴板写入完成，再模拟 Ctrl+V
+    // 确保 ydotoold 在运行
+    try {
+      const { execSync } = require('child_process');
+      execSync('pgrep -x ydotoold', { stdio: 'ignore' });
+    } catch {
+      // daemon 没运行，尝试启动
+      try {
+        const sock = '/run/user/' + process.getuid() + '/.ydotool_socket';
+        try { fs.unlinkSync(sock); } catch {}
+        spawn('ydotoold', [], { detached: true, stdio: 'ignore' }).unref();
+      } catch {}
+    }
+
+    const tools = this._detectPasteTools();
+    return new Promise((resolve) => {
       setTimeout(() => {
-        const proc = spawn('xdotool', ['key', '--clearmodifiers', 'ctrl+v']);
-        proc.on('close', (code) => {
-          code === 0 ? resolve({ success: true }) : reject(new Error('粘贴失败，文本已复制到剪贴板，请手动 Ctrl+V'));
-        });
-        proc.on('error', () => reject(new Error('xdotool 不可用，文本已复制到剪贴板，请手动 Ctrl+V')));
+        const tryNext = (i) => {
+          if (i >= tools.length) {
+            this._log('⚠️ 无可用的粘贴工具，文字已在剪贴板中');
+            resolve({ success: true, pasted: false });
+            return;
+          }
+          const tool = tools[i];
+          this._log('尝试粘贴: ' + tool.name);
+          const proc = tool.paste();
+          proc.on('close', (code) => {
+            if (code === 0) {
+              this._log('粘贴成功: ' + tool.name);
+              resolve({ success: true, pasted: true, tool: tool.name });
+            } else {
+              this._log('粘贴失败: ' + tool.name + ' (code=' + code + ')');
+              tryNext(i + 1);
+            }
+          });
+          proc.on('error', (e) => {
+            this._log('粘贴错误: ' + tool.name + ' - ' + e.message);
+            tryNext(i + 1);
+          });
+        };
+        tryNext(0);
       }, 200);
     });
   }
