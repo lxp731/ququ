@@ -52,8 +52,6 @@ class ClipboardManager {
       return this._pasteLinux();
     } else if (process.platform === 'darwin') {
       return this._pasteMacOS();
-    } else if (process.platform === 'win32') {
-      return this._pasteWindows();
     }
     throw new Error('不支持的操作系统');
   }
@@ -115,18 +113,6 @@ class ClipboardManager {
           code === 0 ? resolve({ success: true }) : reject(new Error('粘贴失败，文本已复制到剪贴板，请手动 Cmd+V'));
         });
         proc.on('error', () => { clearTimeout(timer); reject(new Error('粘贴失败，文本已复制到剪贴板，请手动 Cmd+V')); });
-      }, 200);
-    });
-  }
-
-  _pasteWindows() {
-    return new Promise((resolve, reject) => {
-      setTimeout(() => {
-        const proc = spawn('powershell', ['-Command', 'Add-Type -AssemblyName System.Windows.Forms; [System.Windows.Forms.SendKeys]::SendWait("^v")']);
-        proc.on('close', (code) => {
-          code === 0 ? resolve({ success: true }) : reject(new Error('粘贴失败，文本已复制到剪贴板，请手动 Ctrl+V'));
-        });
-        proc.on('error', () => reject(new Error('粘贴失败，文本已复制到剪贴板，请手动 Ctrl+V')));
       }, 200);
     });
   }
