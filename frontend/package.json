@@ -1,57 +1,33 @@
 {
   "name": "ququ",
   "version": "1.0.0",
-  "description": " 蛐蛐-基于FunASR和可配置AI模型的中文优化语音转文字应用",
+  "description": "蛐蛐 - 基于FunASR和AI的中文语音转文字应用",
   "main": "main.js",
   "private": true,
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "start": "electron .",
-    "dev": "concurrently -k -r \"npm:dev:renderer\" \"npm:dev:main\"",
-    "dev:main": "cross-env NODE_ENV=development electron . --dev",
+    "dev": "concurrently -k --restart-tries 3 \"npm:dev:renderer\" \"npm:dev:main\"",
+    "dev:main": "cross-env NODE_ENV=development ELECTRON_RUN_AS_NODE= electron . --no-sandbox --dev",
     "dev:renderer": "vite",
     "build": "vite build && electron-builder",
-    "postinstall": "electron-builder install-app-deps",
     "build:renderer": "vite build",
+    "build:linux": "electron-builder --linux",
     "build:mac": "electron-builder --mac",
     "build:win": "electron-builder --win",
-    "build:linux": "electron-builder --linux",
+    "postinstall": "electron-builder install-app-deps",
     "preview": "vite preview"
   },
-  "keywords": [
-    "dictation",
-    "speech-to-text",
-    "funasr",
-    "ai",
-    "llm",
-    "chinese",
-    "electron",
-    "desktop-app"
-  ],
-  "author": {
-    "name": "yan5xu",
-    "email": "lueco.x@gmail.com"
-  },
+  "keywords": ["dictation", "speech-to-text", "funasr", "ai", "chinese", "electron"],
+  "author": { "name": "yan5xu", "email": "lueco.x@gmail.com" },
   "license": "MIT",
   "devDependencies": {
-    "@electron/notarize": "^3.0.1",
-    "@eslint/js": "^9.25.0",
-    "@tailwindcss/postcss": "^4.1.13",
     "@tailwindcss/vite": "^4.1.10",
-    "@types/react": "^19.1.2",
-    "@types/react-dom": "^19.1.2",
     "@vitejs/plugin-react": "^4.4.1",
-    "autoprefixer": "^10.4.21",
     "concurrently": "^8.2.2",
     "cross-env": "^10.0.0",
     "electron": "36.5.0",
     "electron-builder": "^24.6.4",
-    "eslint": "^9.25.0",
-    "eslint-plugin-react-hooks": "^5.2.0",
-    "eslint-plugin-react-refresh": "^0.4.19",
-    "globals": "^16.0.0",
-    "node-gyp": "^11.4.2",
-    "postcss": "^8.5.6",
     "tailwindcss": "^4.1.10",
     "vite": "^6.3.5"
   },
@@ -63,45 +39,23 @@
     "@radix-ui/react-select": "^2.2.5",
     "@radix-ui/react-slot": "^1.2.3",
     "@radix-ui/react-tabs": "^1.1.12",
-    "asynckit": "^0.4.0",
+    "@radix-ui/react-switch": "^1.2.5",
+    "@radix-ui/react-tooltip": "^1.2.7",
     "axios": "^1.6.0",
     "better-sqlite3": "11.10.0",
-    "bindings": "^1.5.0",
-    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
-    "combined-stream": "^1.0.8",
-    "delayed-stream": "^1.0.0",
     "dotenv": "^16.3.1",
-    "electron-updater": "^6.6.2",
-    "es-errors": "^1.3.0",
-    "es-object-atoms": "^1.1.1",
-    "es-set-tostringtag": "^2.1.0",
-    "ffmpeg-static": "^5.2.0",
-    "file-uri-to-path": "^2.0.0",
-    "form-data": "^4.0.4",
-    "get-intrinsic": "^1.3.0",
+    "framer-motion": "^11.15.0",
     "lucide-react": "^0.518.0",
-    "math-intrinsics": "^1.1.0",
-    "mime-db": "^1.54.0",
-    "mime-types": "^3.0.1",
-    "next-themes": "^0.4.6",
-    "osascript": "^1.0.7",
     "react": "^19.1.0",
     "react-dom": "^19.1.0",
-    "shadcn-ui": "^0.9.5",
     "sonner": "^2.0.7",
-    "tailwind-merge": "^3.3.1",
-    "tailwindcss-animate": "^1.0.7",
-    "tar": "^7.4.3",
-    "tw-animate-css": "^1.3.4",
-    "unzipper": "^0.12.3"
+    "tailwind-merge": "^3.3.1"
   },
   "build": {
     "appId": "com.ququ.app",
     "productName": "蛐蛐",
-    "directories": {
-      "output": "dist"
-    },
+    "directories": { "output": "dist" },
     "files": [
       "main.js",
       "preload.js",
@@ -109,15 +63,12 @@
       "node_modules/**/*",
       "dist/**/*",
       "src/helpers/**/*",
-      "src/utils/**/*",
       "assets/**/*",
       "!node_modules/.cache/**/*",
       "!node_modules/electron/**/*"
     ],
     "asarUnpack": [
-      "node_modules/**/*ffmpeg-static*/**/*",
-      "node_modules/**/*better-sqlite3*/**/*",
-      "node_modules/**/*bindings*/**/*"
+      "node_modules/**/*better-sqlite3*/**/*"
     ],
     "mac": {
       "category": "public.app-category.productivity",
@@ -125,23 +76,13 @@
       "hardenedRuntime": true,
       "gatekeeperAssess": false,
       "entitlements": "entitlements.mac.plist",
-      "entitlementsInherit": "entitlements.mac.plist",
-      "notarize": {
-        "teamId": "7MTHK6DGS4"
-      }
+      "entitlementsInherit": "entitlements.mac.plist"
     },
-    "win": {
-      "icon": "assets/icon.ico"
-    },
+    "win": { "icon": "assets/icon.ico" },
     "linux": {
       "icon": "assets/icon.png",
       "category": "Office",
-      "target": [
-        {
-          "target": "AppImage",
-          "arch": ["x64"]
-        }
-      ],
+      "target": [{ "target": "AppImage", "arch": ["x64"] }],
       "maintainer": "yan5xu <lueco.x@gmail.com>",
       "synopsis": "蛐蛐 - 中文语音输入工具",
       "description": "开源免费的 Wispr Flow 替代方案，基于 FunASR 本地语音识别和可配置 AI 模型的语音转文字桌面应用。"

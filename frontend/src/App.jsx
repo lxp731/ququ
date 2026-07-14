@@ -1,758 +1,567 @@
-import React, { useState, useEffect, useRef, useCallback } from "react";
-import "./index.css";
-import { toast } from "sonner";
-import { LoadingDots } from "./components/ui/loading-dots";
-import { useHotkey } from "./hooks/useHotkey";
-import { useWindowDrag } from "./hooks/useWindowDrag";
-import { useRecording } from "./hooks/useRecording";
-import { useTextProcessing } from "./hooks/useTextProcessing";
-import { useModelStatus } from "./hooks/useModelStatus";
-import { usePermissions } from "./hooks/usePermissions";
-import { Mic, MicOff, Settings, History, Copy, Download } from "lucide-react";
-import SettingsPanel from "./components/SettingsPanel";
-import { ModelDownloadProgress } from "./components/ui/model-status-indicator";
+import React, { useState, useEffect, useCallback, useRef } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { toast } from 'sonner';
+import { Mic, Settings, History, Copy, Download, Sparkles, Keyboard, Timer } from 'lucide-react';
+import './index.css';
+import { useHotkey } from './hooks/useHotkey';
+import { useRecording } from './hooks/useRecording';
+import { useModelStatus } from './hooks/useModelStatus';
 
-// 动态导入设置页面组件
-const SettingsPage = React.lazy(() => import('./settings.jsx').then(module => ({ default: module.SettingsPage })));
-
-// 声波图标组件（空闲/悬停状态）
-const SoundWaveIcon = ({ size = 16, isActive = false }) => {
-  return (
-    <div className="flex items-center justify-center gap-1">
-      {[...Array(4)].map((_, i) => (
-        <div
-          key={i}
-          className={`bg-slate-600 dark:bg-gray-300 rounded-full transition-all duration-150 shadow-sm ${
-            isActive ? "wave-bar" : ""
-          }`}
-          style={{
-            width: size * 0.15,
-            height: isActive ? size * 0.8 : size * 0.4,
-            animationDelay: isActive ? `${i * 0.1}s` : "0s",
-          }}
-        />
-      ))}
-    </div>
-  );
-};
-
-// 加载指示器组件（FunASR启动中）
-const LoadingIndicator = ({ size = 20 }) => {
-  return (
-    <div className="flex items-center justify-center gap-0.5">
-      {[...Array(3)].map((_, i) => (
-        <div
-          key={i}
-          className="w-1 bg-gray-500 rounded-full"
-          style={{
-            height: size * 0.6,
-            animation: `loading-dots 1.4s ease-in-out infinite`,
-            animationDelay: `${i * 0.2}s`,
-          }}
-        />
-      ))}
-    </div>
-  );
-};
-
-// 语音波形指示器组件（处理状态）
-const VoiceWaveIndicator = ({ isListening }) => {
-  return (
-    <div className="flex items-center justify-center gap-0.5">
-      {[...Array(4)].map((_, i) => (
-        <div
-          key={i}
-          className={`w-0.5 bg-white rounded-full transition-all duration-150 drop-shadow-sm ${
-            isListening ? "animate-pulse h-5" : "h-2"
-          }`}
-          style={{
-            animationDelay: isListening ? `${i * 0.1}s` : "0s",
-            animationDuration: isListening ? `${0.6 + i * 0.1}s` : "0s",
-          }}
-        />
-      ))}
-    </div>
-  );
-};
-
-// 增强的工具提示组件
-const Tooltip = ({ children, content, position = "top" }) => {
-  const [isVisible, setIsVisible] = useState(false);
-
-  const getPositionClasses = () => {
-    if (position === "bottom") {
-      return {
-        tooltip: "absolute top-full left-1/2 transform -translate-x-1/2 mt-2 px-2 py-1 text-white bg-gradient-to-r from-neutral-800 to-neutral-700 rounded-md whitespace-nowrap z-50 transition-opacity duration-150",
-        arrow: "absolute bottom-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-2 border-r-2 border-b-2 border-transparent border-b-neutral-800"
-      };
-    }
-    // 默认为顶部
-    return {
-      tooltip: "absolute bottom-full left-1/2 transform -translate-x-1/2 mb-2 px-2 py-1 text-white bg-gradient-to-r from-neutral-800 to-neutral-700 rounded-md whitespace-nowrap z-50 transition-opacity duration-150",
-      arrow: "absolute top-full left-1/2 transform -translate-x-1/2 w-0 h-0 border-l-2 border-r-2 border-t-2 border-transparent border-t-neutral-800"
-    };
-  };
-
-  const { tooltip, arrow } = getPositionClasses();
-
-  return (
-    <div className="relative inline-block">
+// ═══════════════════════════════════════════
+//  Subtle animated background dots
+// ═══════════════════════════════════════════
+const BgDots = () => (
+  <div className="absolute inset-0 overflow-hidden pointer-events-none">
+    {[...Array(20)].map((_, i) => (
       <div
-        onMouseEnter={() => setIsVisible(true)}
-        onMouseLeave={() => setIsVisible(false)}
-      >
-        {children}
-      </div>
-      {isVisible && (
-        <div
-          className={tooltip}
-          style={{ fontSize: "10px" }}
-        >
-          {content}
-          <div className={arrow}></div>
-        </div>
+        key={i}
+        className="absolute w-1 h-1 rounded-full bg-white/10"
+        style={{
+          left: `${Math.random() * 100}%`,
+          top: `${Math.random() * 100}%`,
+          animation: `pulse ${2 + Math.random() * 3}s ease-in-out infinite`,
+          animationDelay: `${Math.random() * 2}s`,
+        }}
+      />
+    ))}
+  </div>
+);
+
+// ═══════════════════════════════════════════
+//  Animated Waveform
+// ═══════════════════════════════════════════
+const Waveform = ({ active, color = 'indigo' }) => (
+  <div className="flex items-center justify-center gap-0.5 h-8">
+    {[...Array(16)].map((_, i) => (
+      <motion.div
+        key={i}
+        className={`w-0.5 rounded-full bg-${color}-400`}
+        animate={active ? {
+          height: [4, Math.random() * 24 + 4, 4],
+          opacity: [0.4, 1, 0.4],
+        } : { height: 4, opacity: 0.3 }}
+        transition={active ? {
+          duration: 0.6 + Math.random() * 0.4,
+          repeat: Infinity,
+          delay: i * 0.05,
+          ease: 'easeInOut',
+        } : {}}
+      />
+    ))}
+  </div>
+);
+
+// ═══════════════════════════════════════════
+//  Mic Button — the hero
+// ═══════════════════════════════════════════
+const MicButton = ({ state, onClick, disabled }) => {
+  const isRecording = state === 'recording';
+  const isProcessing = state === 'processing' || state === 'optimizing';
+  const isDisabled = disabled || isProcessing;
+
+  return (
+    <motion.div className="relative inline-flex items-center justify-center" whileHover={{ scale: isDisabled ? 1 : 1.05 }}>
+      {/* Pulse rings when recording */}
+      {isRecording && (
+        <>
+          <div className="mic-ring" />
+          <div className="mic-ring" />
+          <div className="mic-ring" />
+        </>
       )}
+
+      {/* Main button */}
+      <motion.button
+        onClick={onClick}
+        disabled={isDisabled}
+        className={`relative z-10 w-20 h-20 rounded-full flex items-center justify-center
+          border-2 transition-all duration-500 cursor-pointer
+          ${isRecording
+            ? 'border-indigo-400/50 bg-indigo-500/20 recording-glow'
+            : isProcessing
+              ? 'border-white/10 bg-white/5 cursor-wait'
+              : 'border-white/10 bg-white/[0.06] hover:bg-white/[0.12] hover:border-white/20'
+          }
+          ${isDisabled && !isProcessing ? 'opacity-40 cursor-not-allowed' : ''}
+        `}
+        whileTap={isDisabled ? {} : { scale: 0.92 }}
+        animate={isRecording ? { scale: [1, 1.03, 1] } : { scale: 1 }}
+        transition={isRecording ? { duration: 2, repeat: Infinity, ease: 'easeInOut' } : {}}
+      >
+        {/* Inner icon area */}
+        <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-500
+          ${isRecording ? 'bg-indigo-500/20' : 'bg-white/[0.04]'}`}
+        >
+          {isProcessing ? (
+            <motion.div
+              className="w-6 h-6 border-2 border-indigo-400/60 border-t-transparent rounded-full"
+              animate={{ rotate: 360 }}
+              transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
+            />
+          ) : isRecording ? (
+            <div className="flex gap-1">
+              {[...Array(4)].map((_, i) => (
+                <motion.div
+                  key={i}
+                  className="w-1 bg-indigo-300 rounded-full"
+                  animate={{ height: [8, 20, 8] }}
+                  transition={{ duration: 0.6, repeat: Infinity, delay: i * 0.1, ease: 'easeInOut' }}
+                />
+              ))}
+            </div>
+          ) : (
+            <Mic className="w-6 h-6 text-white/60" />
+          )}
+        </div>
+      </motion.button>
+    </motion.div>
+  );
+};
+
+// ═══════════════════════════════════════════
+//  Tooltip
+// ═══════════════════════════════════════════
+const Tooltip = ({ children, content, position = "top" }) => {
+  const [show, setShow] = useState(false);
+  const isTop = position === "top";
+  return (
+    <div className="relative" onMouseEnter={() => setShow(true)} onMouseLeave={() => setShow(false)}>
+      {children}
+      <AnimatePresence>
+        {show && (
+          <motion.div
+            initial={{ opacity: 0, y: isTop ? 4 : -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            exit={{ opacity: 0, y: isTop ? 4 : -4 }}
+            className={`absolute left-1/2 -translate-x-1/2 px-2.5 py-1 text-[10px] whitespace-nowrap rounded-lg bg-white/10 backdrop-blur-md border border-white/10 text-white/80 z-50 ${
+              isTop ? 'bottom-full mb-2' : 'top-full mt-2'
+            }`}
+          >
+            {content}
+            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white/10" />
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 };
 
-// 文本显示区域组件
-const TextDisplay = ({ originalText, processedText, isProcessing, onCopy, onExport, onPaste }) => {
-  if (!originalText && !processedText) {
-    return null; // 当没有文本时不显示任何内容，避免重复
-  }
-
+// ═══════════════════════════════════════════
+//  Text Display Panel
+// ═══════════════════════════════════════════
+const TextPanel = ({ original, processed, isOptimizing, onCopy, onPaste }) => {
+  if (!original && !processed) return null;
   return (
-    <div className="space-y-4">
-      {/* 原始识别文本 - 简化设计，单行显示 */}
-      {originalText && (
-        <div className="bg-slate-100/80 dark:bg-gray-800/80 rounded-lg p-3 shadow-sm">
-          <div className="flex items-center justify-between">
-            <p className="chinese-content text-gray-800 dark:text-gray-200 flex-1 truncate pr-2">
-              {originalText}
-            </p>
-            <button
-              onClick={() => onCopy(originalText)}
-              className="p-1.5 hover:bg-slate-200/70 dark:hover:bg-gray-700/70 rounded-md transition-colors flex-shrink-0"
-              title="复制识别文本"
-            >
-              <Copy className="w-4 h-4 text-slate-600 dark:text-gray-400" />
+    <motion.div
+      initial={{ opacity: 0, y: 20 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="space-y-3"
+    >
+      {/* Original text */}
+      {original && (
+        <div className="glass-light p-4 group">
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-[10px] uppercase tracking-widest text-white/30">识别结果</span>
+            <button onClick={() => onCopy(original)}
+              className="p-1.5 rounded-lg hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100">
+              <Copy className="w-3.5 h-3.5 text-white/50" />
             </button>
           </div>
+          <p className="text-sm text-white/80 leading-relaxed">{original}</p>
         </div>
       )}
 
-      {/* AI处理后文本 */}
-      {(processedText || isProcessing) && (
-        <div className="bg-gradient-to-br from-emerald-50 to-emerald-100 dark:from-emerald-900/20 dark:to-emerald-800/20 rounded-xl p-5 border-l-4 border-emerald-400 dark:border-emerald-500 shadow-lg border border-emerald-200/50 dark:border-emerald-700/50">
-          <div className="flex items-center justify-between mb-3">
-            <h3 className="text-base font-semibold chinese-title text-emerald-700 dark:text-emerald-400">AI优化后</h3>
-            <div className="flex space-x-2">
-              {processedText && (
+      {/* AI Optimized */}
+      {(processed || isOptimizing) && (
+        <motion.div
+          initial={{ opacity: 0, y: 10 }}
+          animate={{ opacity: 1, y: 0 }}
+          className="glass-light p-4 border-indigo-400/20"
+        >
+          <div className="flex items-center justify-between mb-2">
+            <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-indigo-300/70">
+              <Sparkles className="w-3 h-3" /> AI 优化
+            </span>
+            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+              {processed && (
                 <>
-                  <button
-                    onClick={() => onPaste(processedText)}
-                    className="p-2 hover:bg-emerald-200/70 dark:hover:bg-emerald-700/30 rounded-lg transition-colors shadow-sm"
-                    title="粘贴优化文本"
-                  >
-                    <svg className="w-5 h-5 text-emerald-600 dark:text-emerald-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5H7a2 2 0 00-2 2v10a2 2 0 002 2h8a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2" />
-                    </svg>
+                  <button onClick={() => onPaste(processed)}
+                    className="p-1.5 rounded-lg hover:bg-indigo-500/20 transition-colors" title="粘贴">
+                    <Download className="w-3.5 h-3.5 text-indigo-400/70" />
                   </button>
-                  <button
-                    onClick={() => onCopy(processedText)}
-                    className="p-2 hover:bg-emerald-200/70 dark:hover:bg-emerald-700/30 rounded-lg transition-colors shadow-sm"
-                    title="复制优化文本"
-                  >
-                    <Copy className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
-                  </button>
-                  <button
-                    onClick={() => onExport(processedText)}
-                    className="p-2 hover:bg-emerald-200/70 dark:hover:bg-emerald-700/30 rounded-lg transition-colors shadow-sm"
-                    title="导出文本"
-                  >
-                    <Download className="w-5 h-5 text-emerald-600 dark:text-emerald-400" />
+                  <button onClick={() => onCopy(processed)}
+                    className="p-1.5 rounded-lg hover:bg-indigo-500/20 transition-colors" title="复制">
+                    <Copy className="w-3.5 h-3.5 text-indigo-400/70" />
                   </button>
                 </>
               )}
             </div>
           </div>
-          {isProcessing ? (
-            <div className="flex items-center space-x-3 text-emerald-700 dark:text-emerald-400">
-              <LoadingDots />
-              <span className="status-text">AI正在优化文本...</span>
+          {isOptimizing ? (
+            <div className="flex items-center gap-3 py-2">
+              <motion.div className="w-4 h-4 border-2 border-indigo-400/60 border-t-transparent rounded-full"
+                animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} />
+              <span className="text-sm text-indigo-300/60">AI 正在优化文本...</span>
             </div>
           ) : (
-            <p className="chinese-content leading-loose fade-in text-gray-800 dark:text-gray-200">
-              {processedText}
-            </p>
+            <p className="text-sm text-white/90 leading-relaxed">{processed}</p>
           )}
-        </div>
+        </motion.div>
       )}
-    </div>
+    </motion.div>
   );
 };
 
+// ═══════════════════════════════════════════
+//  MAIN APP
+// ═══════════════════════════════════════════
 export default function App() {
-  // 检查URL参数来决定渲染哪个页面
   const urlParams = new URLSearchParams(window.location.search);
-  const page = urlParams.get('page');
-  
-  // 如果是设置页面，直接渲染设置组件
-  if (page === 'settings') {
+  const isSettings = urlParams.get('page') === 'settings';
+  const isControl = urlParams.get('panel') === 'control';
+
+  if (isSettings) {
+    const SettingsPage = React.lazy(() => import('./settings.jsx'));
     return (
-      <React.Suspense fallback={
-        <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 flex items-center justify-center">
-          <div className="flex items-center space-x-3">
-            <LoadingDots />
-            <span className="text-gray-700 dark:text-gray-300">加载设置页面...</span>
-          </div>
-        </div>
-      }>
+      <React.Suspense fallback={<div className="min-h-screen animated-bg flex items-center justify-center"><div className="w-6 h-6 border-2 border-indigo-400/60 border-t-transparent rounded-full animate-spin" /></div>}>
         <SettingsPage />
       </React.Suspense>
     );
   }
 
+  const [originalText, setOriginalText] = useState('');
+  const [processedText, setProcessedText] = useState('');
+  const [isOptimizing, setIsOptimizing] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
-  const [originalText, setOriginalText] = useState("");
-  const [processedText, setProcessedText] = useState("");
-  const [showTextArea, setShowTextArea] = useState(false);
-  const [showSettings, setShowSettings] = useState(false);
-  
-  const { isDragging, handleMouseDown, handleMouseMove, handleMouseUp, handleClick } = useWindowDrag();
+  const [recordingMode, setRecordingMode] = useState('toggle');
+  const [isCapturingHotkey, setIsCapturingHotkey] = useState(false);
+
   const modelStatus = useModelStatus();
-  
-  const {
-    isRecording,
-    isProcessing: isRecordingProcessing,
-    isOptimizing,
-    startRecording,
-    stopRecording,
-    error: recordingError
-  } = useRecording();
-  
-  const {
-    processText,
-    isProcessing: isTextProcessing,
-    error: textProcessingError
-  } = useTextProcessing();
+  const { isRecording, isProcessing: isRecProcessing, startRecording, stopRecording } = useRecording(modelStatus);
+  const { hotkey, rawHotkey, registerHotkey, unregisterHotkey, syncRecordingState } = useHotkey();
 
-  // 防重复粘贴的引用
-  const lastPasteRef = useRef({ text: '', timestamp: 0 });
-  const PASTE_DEBOUNCE_TIME = 1000; // 1秒内相同文本不重复粘贴
+  const lastPasteRef = useRef({ text: '', ts: 0 });
 
-  // 安全粘贴函数
+  // Load saved recording mode
+  useEffect(() => {
+    window.electronAPI?.getSetting('recording_mode', 'toggle').then(setRecordingMode);
+  }, []);
+
+  // Safe paste with dedup
   const safePaste = useCallback(async (text) => {
     const now = Date.now();
-    const lastPaste = lastPasteRef.current;
-    
-    // 防重复粘贴：如果是相同文本且在防抖时间内，则跳过
-    if (lastPaste.text === text && (now - lastPaste.timestamp) < PASTE_DEBOUNCE_TIME) {
-      console.log("🚫 跳过重复粘贴，文本:", text.substring(0, 50) + "...");
-      return;
-    }
-    
-    // 更新最后粘贴记录
-    lastPasteRef.current = { text, timestamp: now };
-    
-    console.log("🔄 safePaste 被调用，文本:", text.substring(0, 50) + "...");
+    if (lastPasteRef.current.text === text && now - lastPasteRef.current.ts < 1000) return;
+    lastPasteRef.current = { text, ts: now };
     try {
       if (window.electronAPI) {
-        console.log("📱 使用 Electron API 进行粘贴");
         await window.electronAPI.pasteText(text);
-        console.log("✅ 粘贴成功");
-        toast.success("文本已自动粘贴到当前输入框");
+        toast.success('已自动粘贴到当前输入框');
       } else {
-        // Web环境下只能复制到剪贴板
-        console.log("🌐 Web环境，仅复制到剪贴板");
         await navigator.clipboard.writeText(text);
-        toast.info("文本已复制到剪贴板，请手动粘贴");
+        toast.info('已复制到剪贴板');
       }
-    } catch (error) {
-      console.error("❌ 粘贴文本失败:", error);
-      toast.error("粘贴失败", {
-        description: "请检查辅助功能权限。文本已复制到剪贴板 - 请手动使用 Cmd+V 粘贴。"
-      });
+    } catch (e) {
+      toast.error('粘贴失败，请手动粘贴');
     }
   }, []);
 
-  // 处理录音完成（FunASR识别完成）
-  const handleRecordingComplete = useCallback(async (transcriptionResult) => {
-    console.log("🎤 handleRecordingComplete 被调用:", transcriptionResult);
-    if (transcriptionResult.success && transcriptionResult.text) {
-      console.log("✅ 转录成功，文本:", transcriptionResult.text);
-      // 立即显示FunASR识别的原始文本
-      setOriginalText(transcriptionResult.text);
-      setShowTextArea(true);
-      
-      // 清空之前的处理结果，等待AI优化
-      setProcessedText("");
-
-      // 不立即粘贴，等待AI优化完成后再粘贴
-      console.log("⏳ 等待AI优化完成后再进行粘贴...");
-      
-      // 注意：不在这里保存到数据库，由 useRecording.js 统一处理保存逻辑
-
-      toast.success("🎤 语音识别完成，AI正在优化文本...");
-    } else {
-      console.log("❌ 转录失败或无文本:", transcriptionResult);
-    }
+  // Recording complete callback
+  const handleRecordingComplete = useCallback(async (result) => {
+    if (!result?.success || !result.text) return;
+    setOriginalText(result.text);
+    setProcessedText('');
+    setIsOptimizing(true);
   }, []);
 
-  // 处理AI优化完成
-  const handleAIOptimizationComplete = useCallback(async (optimizedResult) => {
-    console.log('AI优化完成回调被触发:', optimizedResult);
-    if (optimizedResult.success && optimizedResult.enhanced_by_ai && optimizedResult.text) {
-      // 显示AI优化后的文本
-      setProcessedText(optimizedResult.text);
-      
-      // 自动粘贴AI优化后的文本
-      console.log("📋 准备粘贴AI优化后的文本:", optimizedResult.text);
-      await safePaste(optimizedResult.text);
-      console.log("✅ AI优化文本粘贴完成");
-      
-      toast.success("🤖 AI文本优化完成并已自动粘贴！");
-      console.log('AI优化文本已设置:', optimizedResult.text);
+  // AI optimization complete callback
+  const handleAIOptimizationComplete = useCallback(async (result) => {
+    setIsOptimizing(false);
+    if (result?.enhanced_by_ai) {
+      // AI 实际优化过的文本，显示在优化区块
+      setProcessedText(result.text);
+      await safePaste(result.text);
+      toast.success('AI 优化完成，已自动粘贴');
     } else {
-      console.warn('AI优化结果无效，使用原始文本:', optimizedResult);
-      // 如果AI优化失败，则粘贴原始文本
+      // AI 未启用或优化失败，只粘贴原始文本，不显示 AI 优化区块
+      setProcessedText('');
       if (originalText) {
-        console.log("📋 AI优化失败，粘贴原始文本:", originalText);
         await safePaste(originalText);
-        toast.info("AI优化失败，已粘贴原始识别文本");
       }
     }
   }, [safePaste, originalText]);
 
-  // 设置转录完成回调
+  // Register callbacks on window
   useEffect(() => {
-    console.log('设置回调函数');
     window.onTranscriptionComplete = handleRecordingComplete;
     window.onAIOptimizationComplete = handleAIOptimizationComplete;
-    
-    // 验证回调函数是否正确设置
-    console.log('回调函数设置完成:', {
-      onTranscriptionComplete: typeof window.onTranscriptionComplete,
-      onAIOptimizationComplete: typeof window.onAIOptimizationComplete
-    });
-    
-    return () => {
-      console.log('清理回调函数');
-      window.onTranscriptionComplete = null;
-      window.onAIOptimizationComplete = null;
-    };
+    return () => { window.onTranscriptionComplete = null; window.onAIOptimizationComplete = null; };
   }, [handleRecordingComplete, handleAIOptimizationComplete]);
 
-  // 处理复制文本
-  const handleCopyText = async (text) => {
-    try {
-      if (window.electronAPI) {
-        const result = await window.electronAPI.copyText(text);
-        if (result.success) {
-          toast.success("文本已复制到剪贴板");
-        } else {
-          throw new Error(result.error || "复制失败");
-        }
-      } else {
-        await navigator.clipboard.writeText(text);
-        toast.success("文本已复制到剪贴板");
-      }
-    } catch (error) {
-      console.error("复制文本失败:", error);
-      toast.error(`无法复制文本到剪贴板: ${error.message}`);
-    }
-  };
-
-
-  // 处理导出文本
-  const handleExportText = async (text) => {
-    try {
-      if (window.electronAPI) {
-        await window.electronAPI.exportTranscriptions('txt');
-        toast.success("文本已导出到文件");
-      } else {
-        // Web环境下载文件
-        const blob = new Blob([text], { type: 'text/plain;charset=utf-8' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = `蛐蛐转录_${new Date().toISOString().slice(0, 19).replace(/:/g, '-')}.txt`;
-        a.click();
-        URL.revokeObjectURL(url);
-      }
-    } catch (error) {
-      toast.error("无法导出文本文件");
-    }
-  };
-
-  // 处理模型下载
-  const handleDownloadModels = useCallback(async () => {
-    try {
-      // 显示开始下载的提示
-      toast.info("📥 开始下载模型文件...");
-      
-      const result = await modelStatus.downloadModels();
-      if (result.success) {
-        toast.success("🎉 模型下载完成，正在加载...");
-      } else {
-        toast.error(`❌ 模型下载失败: ${result.error}`);
-      }
-    } catch (error) {
-      console.error('下载模型失败:', error);
-      toast.error(`❌ 模型下载失败: ${error.message}`);
-    }
-  }, [modelStatus]);
-
-  // 切换录音状态
+  // Toggle recording
   const toggleRecording = useCallback(() => {
-    // 检查模型状态
-    if (modelStatus.stage === 'need_download') {
-      toast.warning("📥 请先下载AI模型文件");
-      return;
-    }
-    
-    if (modelStatus.stage === 'downloading') {
-      toast.warning("⬇️ 模型正在下载中，请稍候...");
-      return;
-    }
-    
-    if (modelStatus.stage === 'loading') {
-      toast.warning("🤖 模型正在加载中，请稍候...");
-      return;
-    }
-    
-    if (modelStatus.stage === 'error') {
-      toast.error(`❌ 模型错误: ${modelStatus.error}`);
-      return;
-    }
-    
     if (!modelStatus.isReady) {
-      toast.warning("⏳ 模型未就绪，请稍候...");
+      const msgs = { need_download: '请先下载 AI 模型', downloading: '模型下载中...', loading: '模型加载中...', error: `模型错误: ${modelStatus.error}` };
+      toast.warning(msgs[modelStatus.stage] || '模型未就绪');
       return;
     }
+    if (!isRecording && !isRecProcessing) startRecording();
+    else if (isRecording) stopRecording();
+  }, [modelStatus, isRecording, isRecProcessing, startRecording, stopRecording]);
 
-    if (!isRecording && !isRecordingProcessing) {
-      startRecording();
-    } else if (isRecording) {
-      stopRecording();
-    }
-  }, [modelStatus, isRecording, isRecordingProcessing, startRecording, stopRecording]);
-
-  // 使用热键Hook，不再使用F2双击功能
-  const { hotkey, syncRecordingState, registerHotkey } = useHotkey();
-
-  // 注册传统热键监听 - 只在主窗口注册，避免重复
+  // Hotkey capture
   useEffect(() => {
-    // 检查是否为控制面板窗口
-    const urlParams = new URLSearchParams(window.location.search);
-    const isControlPanel = urlParams.get('panel') === 'control';
-    
-    // 只有主窗口才注册热键
-    if (isControlPanel) {
-      console.log('控制面板窗口，跳过热键注册');
-      return;
-    }
-
-    const initializeHotkey = async () => {
-      try {
-        // 注册默认热键 CommandOrControl+Shift+Space
-        const success = await registerHotkey('CommandOrControl+Shift+Space');
-        if (success) {
-          console.log('主窗口热键注册成功');
-        } else {
-          console.error('主窗口热键注册失败');
-        }
-      } catch (error) {
-        console.error('主窗口热键注册异常:', error);
-      }
+    if (!isCapturingHotkey) return;
+    const handler = async (e) => {
+      e.preventDefault(); e.stopPropagation();
+      if (['Control', 'Shift', 'Alt', 'Meta'].includes(e.key)) return;
+      const parts = [];
+      if (e.ctrlKey || e.metaKey) parts.push('Ctrl');
+      if (e.shiftKey) parts.push('Shift');
+      if (e.altKey) parts.push('Alt');
+      parts.push(e.key === ' ' ? 'Space' : e.key.length === 1 ? e.key.toUpperCase() : e.key);
+      const newKey = parts.join('+');
+      await unregisterHotkey(rawHotkey);
+      const ok = await registerHotkey(newKey);
+      if (ok) await window.electronAPI?.setSetting('global_hotkey', newKey);
+      setIsCapturingHotkey(false);
     };
+    window.addEventListener('keydown', handler, true);
+    const t = setTimeout(() => setIsCapturingHotkey(false), 5000);
+    return () => { window.removeEventListener('keydown', handler, true); clearTimeout(t); };
+  }, [isCapturingHotkey, rawHotkey, registerHotkey, unregisterHotkey]);
 
-    if (registerHotkey) {
-      initializeHotkey();
-    }
-  }, [registerHotkey]);
+  // 用 ref 避免闭包过期
+  const isRecordingRef = useRef(isRecording);
+  isRecordingRef.current = isRecording;
+  const startRef = useRef(startRecording);
+  startRef.current = startRecording;
+  const stopRef = useRef(stopRecording);
+  stopRef.current = stopRecording;
 
-  // 处理关闭窗口
-  const handleClose = () => {
-    if (window.electronAPI) {
-      window.electronAPI.hideWindow();
-    }
-  };
+  // Hold mode: KeyWatcher (evdev) 全局监听，追踪组合键 Ctrl/Meta + Space
+  const heldKeys = useRef(new Set());
 
-  // 处理打开设置
-  const handleOpenSettings = () => {
-    if (window.electronAPI) {
-      window.electronAPI.openSettingsWindow();
-    } else {
-      // Web环境下仍然使用模态框
-      setShowSettings(true);
-    }
-  };
-
-  // 处理打开历史记录
-  const handleOpenHistory = () => {
-    if (window.electronAPI) {
-      window.electronAPI.openHistoryWindow();
-    }
-  };
-
-
-  // 监听全局热键触发事件
   useEffect(() => {
-    if (window.electronAPI) {
-      // 监听传统热键触发
-      const unsubscribeHotkey = window.electronAPI.onHotkeyTriggered((event, data) => {
-        console.log('收到热键触发事件:', data);
-        console.log('当前录音状态:', isRecording, '处理状态:', isRecordingProcessing);
-        toggleRecording();
-      });
+    if (recordingMode !== 'hold') return;
+    window.electronAPI?.startHoldWatch();
 
-      // 监听旧的toggle事件（保持兼容性）
-      const unsubscribeToggle = window.electronAPI.onToggleDictation(() => {
-        console.log('收到旧版toggle事件');
-        console.log('当前录音状态:', isRecording, '处理状态:', isRecordingProcessing);
-        toggleRecording();
-      });
+    const isModHeld = () => heldKeys.current.has('Control') || heldKeys.current.has('Meta') || heldKeys.current.has('Alt');
+    const isSpaceHeld = () => heldKeys.current.has('Space');
 
-      return () => {
-        if (unsubscribeHotkey) unsubscribeHotkey();
-        if (unsubscribeToggle) unsubscribeToggle();
-      };
-    }
-  }, [toggleRecording, isRecording, isRecordingProcessing]);
-
-  // 同步录音状态到热键管理器
-  useEffect(() => {
-    if (syncRecordingState) {
-      syncRecordingState(isRecording);
-    }
-  }, [isRecording, syncRecordingState]);
-
-  // 监听键盘事件
-  useEffect(() => {
-    const handleKeyPress = (e) => {
-      if (e.key === "Escape") {
-        handleClose();
+    const u1 = window.electronAPI?.onHoldKeyDown((data) => {
+      const key = data?.key;
+      heldKeys.current.add(key);
+      // 只有同时按住 Ctrl/Meta/Alt + Space 才触发录音
+      if (isSpaceHeld() && isModHeld() && !isRecordingRef.current && !isRecProcessingRef.current) {
+        startRef.current();
       }
-    };
+    });
 
-    document.addEventListener("keydown", handleKeyPress);
-    return () => document.removeEventListener("keydown", handleKeyPress);
+    const u2 = window.electronAPI?.onHoldKeyUp((data) => {
+      const key = data?.key;
+      // Ctrl/Meta/Alt 或 Space 松开 → 停止录音
+      if ((isModHeld() || isSpaceHeld()) && isRecordingRef.current) {
+        stopRef.current();
+      }
+      heldKeys.current.delete(key);
+    });
+
+    return () => {
+      u1?.(); u2?.();
+      heldKeys.current.clear();
+      window.electronAPI?.stopHoldWatch();
+    };
+  }, [recordingMode]);
+
+  // isRecProcessing ref（避免闭包问题）
+  const isRecProcessingRef = useRef(isRecProcessing);
+  isRecProcessingRef.current = isRecProcessing;
+
+  // 全局快捷键: 仅切换模式使用；长按模式由 KeyWatcher 接管
+  useEffect(() => {
+    if (recordingMode === 'hold') return;
+    const handler = () => toggleRecording();
+    const u1 = window.electronAPI?.onHotkeyTriggered(handler);
+    const u2 = window.electronAPI?.onToggleDictation(handler);
+    return () => { u1?.(); u2?.(); };
+  }, [toggleRecording, recordingMode]);
+
+  // Sync recording state to main process
+  useEffect(() => { syncRecordingState?.(isRecording); }, [isRecording, syncRecordingState]);
+
+  // Init hotkey
+  useEffect(() => {
+    if (!isControl) registerHotkey('Ctrl+Space');
   }, []);
 
-  // 错误处理
-  useEffect(() => {
-    if (recordingError) {
-      toast.error(recordingError);
-    }
-  }, [recordingError]);
-
-  useEffect(() => {
-    if (textProcessingError) {
-      toast.error(textProcessingError);
-    }
-  }, [textProcessingError]);
-
-  // 确定当前麦克风状态
-  const getMicState = () => {
-    if (isRecording) return "recording";
-    if (isRecordingProcessing) return "processing";
-    if (isOptimizing) return "optimizing";
-    if (isHovered && !isRecording && !isRecordingProcessing && !isOptimizing) return "hover";
-    return "idle";
-  };
-
-  const micState = getMicState();
-  const isListening = isRecording || isRecordingProcessing;
-
-  // 获取麦克风按钮属性
-  const getMicButtonProps = () => {
-    const baseClasses =
-      "rounded-full w-16 h-16 flex items-center justify-center relative overflow-hidden border-2 border-white/80 transition-all duration-300 shadow-xl";
-
-    // 统一的按钮样式，不再根据状态变色
-    const buttonStyle = `${baseClasses} bg-gradient-to-br from-slate-100 to-slate-200 dark:from-gray-700 dark:to-gray-600 hover:from-slate-200 hover:to-slate-300 dark:hover:from-gray-600 dark:hover:to-gray-500 hover:shadow-2xl transform hover:scale-105`;
-
-    // 如果模型未就绪，显示禁用状态（统一的灰色）
-    if (!modelStatus.isReady) {
-      return {
-        className: `${baseClasses} bg-gradient-to-br from-gray-300 to-gray-400 dark:from-gray-600 dark:to-gray-700 cursor-not-allowed opacity-70`,
-        tooltip: modelStatus.stage === 'need_download' ? "请先下载AI模型文件" :
-                 modelStatus.stage === 'downloading' ? `模型下载中... ${modelStatus.downloadProgress || 0}%` :
-                 modelStatus.stage === 'loading' ? "模型加载中，请稍候..." :
-                 modelStatus.stage === 'error' ? `模型错误: ${modelStatus.error}` :
-                 "模型未就绪，请稍候...",
-        disabled: true
-      };
-    }
-
-    switch (micState) {
-      case "idle":
-        return {
-          className: `${buttonStyle} cursor-pointer`,
-          tooltip: `按 [${hotkey}] 开始录音`,
-          disabled: false
-        };
-      case "hover":
-        return {
-          className: `${buttonStyle} scale-105 shadow-2xl cursor-pointer`,
-          tooltip: `按 [${hotkey}] 开始录音`,
-          disabled: false
-        };
-      case "recording":
-        return {
-          className: `${buttonStyle} recording-pulse cursor-pointer`,
-          tooltip: "正在录音...",
-          disabled: false
-        };
-      case "processing":
-        return {
-          className: `${buttonStyle} cursor-not-allowed opacity-70`,
-          tooltip: "正在识别语音...",
-          disabled: true
-        };
-      case "optimizing":
-        return {
-          className: `${buttonStyle} cursor-not-allowed opacity-70`,
-          tooltip: "AI正在优化文本...",
-          disabled: true
-        };
-      default:
-        return {
-          className: `${buttonStyle} cursor-pointer`,
-          tooltip: "点击开始录音",
-          disabled: false
-        };
-    }
-  };
-
-  const micProps = getMicButtonProps();
+  const micState = isRecording ? 'recording' : (isRecProcessing || isOptimizing) ? 'processing' : isHovered ? 'hover' : 'idle';
 
   return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 dark:from-gray-900 dark:to-gray-800 p-4 pb-4">
-      {/* 主界面 */}
-      <div className="max-w-2xl mx-auto min-h-screen flex flex-col">
-        {/* 标题栏 */}
-        <div
-          className="flex items-center justify-between mb-8 draggable"
-          onMouseDown={handleMouseDown}
-          onMouseMove={handleMouseMove}
-          onMouseUp={handleMouseUp}
-        >
-          <h1 className="text-3xl font-bold text-gray-900 dark:text-gray-100 chinese-title">
-            蛐蛐
-          </h1>
-          <div className="flex items-center space-x-3 non-draggable">
+    <div className="min-h-screen animated-bg relative">
+      <BgDots />
+
+      <div className="relative z-10 max-w-lg mx-auto min-h-screen flex flex-col px-5 py-4">
+        {/* ── Title Bar ── */}
+        <div className="flex items-center justify-between mb-6">
+          <h1 className="text-2xl font-bold gradient-text tracking-tight">蛐蛐</h1>
+          <div className="flex items-center gap-1">
             <Tooltip content="历史记录" position="bottom">
-              <button
-                onClick={handleOpenHistory}
-                className="p-3 hover:bg-white/70 dark:hover:bg-gray-700/70 rounded-xl transition-colors shadow-sm"
-              >
-                <History className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+              <button onClick={() => window.electronAPI?.openHistoryWindow()}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+                <History className="w-4 h-4 text-white/50" />
               </button>
             </Tooltip>
             <Tooltip content="设置" position="bottom">
-              <button
-                onClick={handleOpenSettings}
-                className="p-3 hover:bg-white/70 dark:hover:bg-gray-700/70 rounded-xl transition-colors shadow-sm"
-              >
-                <Settings className="w-6 h-6 text-gray-700 dark:text-gray-300" />
+              <button onClick={() => window.electronAPI?.openSettingsWindow()}
+                className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+                <Settings className="w-4 h-4 text-white/50" />
               </button>
             </Tooltip>
           </div>
         </div>
 
-        {/* 录音控制区域 */}
-        <div className="text-center mb-8 flex-shrink-0">
-          <Tooltip content={micProps.tooltip}>
-            <button
-              onClick={(e) => {
-                if (handleClick(e) && !micProps.disabled) {
-                  toggleRecording();
-                }
-              }}
-              onMouseEnter={() => {
-                if (!micProps.disabled) {
-                  setIsHovered(true);
-                }
-              }}
-              onMouseLeave={() => setIsHovered(false)}
-              className={`${micProps.className} non-draggable shadow-lg`}
-              disabled={micProps.disabled}
-            >
-              {/* 动态内容基于状态 */}
-              {modelStatus.stage === 'downloading' ? (
-                <LoadingIndicator size={20} />
-              ) : modelStatus.stage === 'loading' || !modelStatus.isReady ? (
-                <LoadingIndicator size={20} />
-              ) : micState === "idle" ? (
-                <SoundWaveIcon size={20} isActive={false} />
-              ) : micState === "hover" ? (
-                <SoundWaveIcon size={20} isActive={false} />
-              ) : micState === "recording" ? (
-                <SoundWaveIcon size={20} isActive={true} />
-              ) : micState === "processing" ? (
-                <VoiceWaveIndicator isListening={true} />
-              ) : micState === "optimizing" ? (
-                <LoadingIndicator size={20} />
-              ) : null}
-
-              {/* 移除所有状态指示环，保持简洁 */}
-            </button>
-          </Tooltip>
-          
-          <p className="mt-4 status-text text-gray-700 dark:text-gray-300">
-            {modelStatus.stage === 'need_download' ? (
-              "需要下载AI模型文件才能开始使用"
-            ) : modelStatus.stage === 'downloading' ? (
-              `正在下载模型文件... ${modelStatus.downloadProgress || 0}%`
-            ) : modelStatus.stage === 'loading' ? (
-              "模型加载中，请稍候..."
-            ) : modelStatus.stage === 'error' ? (
-              `模型错误: ${modelStatus.error}`
-            ) : !modelStatus.isReady ? (
-              "模型未就绪，请稍候..."
-            ) : micState === "recording" ? (
-              "正在录音，再次点击停止"
-            ) : micState === "processing" ? (
-              "正在识别语音..."
-            ) : micState === "optimizing" ? (
-              "AI正在优化文本，请稍候..."
-            ) : (
-              `点击麦克风或按 ${hotkey} 开始录音`
-            )}
-          </p>
-        </div>
-
-        {/* 模型下载进度显示 */}
-        {(modelStatus.stage === 'need_download' || modelStatus.stage === 'downloading') && (
-          <div className="mb-6">
-            <ModelDownloadProgress
-              modelStatus={modelStatus}
-              onDownload={handleDownloadModels}
+        {/* ── Mic Area ── */}
+        <div className="flex flex-col items-center mb-6">
+          <div
+            className="relative"
+            onMouseEnter={() => setIsHovered(true)}
+            onMouseLeave={() => setIsHovered(false)}
+          >
+            <MicButton
+              state={modelStatus.isReady ? micState : 'disabled'}
+              onClick={toggleRecording}
+              disabled={!modelStatus.isReady}
             />
           </div>
-        )}
 
-        {/* 文本显示区域 - 可滚动 */}
-        <div className="flex-1 text-area-scroll">
-          <TextDisplay
-            originalText={originalText}
-            processedText={processedText}
-            isProcessing={isTextProcessing || isOptimizing}
-            onCopy={handleCopyText}
-            onExport={handleExportText}
+          {/* Status text */}
+          <motion.p
+            key={micState + (modelStatus.isReady ? 'ready' : 'not')}
+            initial={{ opacity: 0, y: -4 }}
+            animate={{ opacity: 1, y: 0 }}
+            className="mt-4 text-sm text-white/40 text-center"
+          >
+            {modelStatus.noApi && 'Electron API 不可用'}
+            {!modelStatus.noApi && modelStatus.stage === 'checking' && '正在检查模型状态...'}
+            {modelStatus.stage === 'need_download' && '需要下载 AI 模型文件'}
+            {modelStatus.stage === 'downloading' && `模型下载中 ${modelStatus.downloadProgress || 0}%`}
+            {modelStatus.stage === 'loading' && 'FunASR 模型加载中...'}
+            {modelStatus.stage === 'error' && `模型错误: ${modelStatus.error || '未知'}`}
+            {modelStatus.stage === 'ready' && micState === 'recording' && '正在录音，再次点击停止'}
+            {modelStatus.stage === 'ready' && micState === 'processing' && '正在识别语音...'}
+            {modelStatus.stage === 'ready' && micState === 'optimizing' && 'AI 正在优化文本...'}
+            {modelStatus.stage === 'ready' && micState === 'idle' && `按 ${hotkey} 或点击麦克风`}
+            {modelStatus.stage === 'ready' && micState === 'hover' && '点击开始录音'}
+          </motion.p>
+
+          {/* Waveform when recording */}
+          <div className="mt-2 h-8">
+            {isRecording && <Waveform active={true} />}
+            {isRecProcessing && <Waveform active={true} color="violet" />}
+          </div>
+
+          {/* Hotkey & Mode Controls */}
+          <div className="mt-3 flex items-center gap-2 no-drag">
+            <Tooltip content={isCapturingHotkey ? '请按下新快捷键...' : '点击修改快捷键'} position="bottom">
+              <motion.button
+                onClick={() => setIsCapturingHotkey(true)}
+                animate={isCapturingHotkey ? { scale: [1, 1.03, 1] } : {}}
+                transition={{ duration: 1, repeat: Infinity }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                  isCapturingHotkey
+                    ? 'border-indigo-400/50 bg-indigo-500/10 text-indigo-300'
+                    : 'border-white/10 text-white/40 hover:border-white/20 hover:text-white/60'
+                }`}
+              >
+                <Keyboard className="w-3 h-3" />
+                {isCapturingHotkey ? '请按键...' : hotkey}
+              </motion.button>
+            </Tooltip>
+
+            <Tooltip content={recordingMode === 'toggle' ? '切换模式：按一次开始，再按停止' : '长按模式：按住录音，松开停止'} position="bottom">
+              <button
+                onClick={async () => {
+                  const next = recordingMode === 'toggle' ? 'hold' : 'toggle';
+                  setRecordingMode(next);
+                  await window.electronAPI?.setSetting('recording_mode', next);
+                }}
+                className={`flex items-center gap-1.5 px-3 py-1.5 text-xs rounded-lg border transition-all ${
+                  recordingMode === 'hold'
+                    ? 'border-emerald-400/30 bg-emerald-500/10 text-emerald-300'
+                    : 'border-white/10 text-white/40 hover:border-white/20'
+                }`}
+              >
+                <Timer className="w-3 h-3" />
+                {recordingMode === 'toggle' ? '切换' : '长按'}
+              </button>
+            </Tooltip>
+          </div>
+        </div>
+
+        {/* ── Model Status Banner ── */}
+        <AnimatePresence>
+          {(modelStatus.stage === 'need_download' || modelStatus.stage === 'downloading' || modelStatus.stage === 'loading') && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+              className="mb-4 overflow-hidden"
+            >
+              <div className="glass-light p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-white/60">
+                    {modelStatus.stage === 'need_download' && '需要下载 AI 模型'}
+                    {modelStatus.stage === 'downloading' && `下载中 ${modelStatus.downloadProgress || 0}%`}
+                    {modelStatus.stage === 'loading' && '模型加载中...'}
+                  </span>
+                  {modelStatus.stage === 'need_download' && (
+                    <button onClick={async () => {
+                      toast.info('开始下载模型...');
+                      const r = await window.electronAPI?.downloadModel();
+                      if (r?.success) toast.success('模型下载完成');
+                    }} className="text-xs px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-lg hover:bg-indigo-500/30 transition-colors">
+                      下载
+                    </button>
+                  )}
+                </div>
+                {(modelStatus.stage === 'downloading' || modelStatus.stage === 'loading') && (
+                  <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full bg-gradient-to-r from-indigo-500 to-purple-500 rounded-full"
+                      animate={{ width: modelStatus.stage === 'loading' ? '90%' : `${modelStatus.downloadProgress || 0}%` }}
+                      transition={{ duration: 0.5 }}
+                    />
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
+        {/* ── Text Display ── */}
+        <div className="flex-1 overflow-y-auto min-h-0">
+          <TextPanel
+            original={originalText}
+            processed={processedText}
+            isOptimizing={isOptimizing}
+            onCopy={async (t) => { await window.electronAPI?.copyText(t); toast.success('已复制'); }}
             onPaste={safePaste}
           />
         </div>
+
+        {/* ── Footer Branding ── */}
+        <div className="text-center py-3 flex items-center justify-center gap-3">
+          <span className="text-[10px] text-white/15 tracking-widest">QUQU</span>
+          {/* Live status dot to confirm React is interactive */}
+          <span className={`inline-block w-1.5 h-1.5 rounded-full ${
+            modelStatus.noApi ? 'bg-red-400' :
+            modelStatus.stage === 'ready' ? 'bg-emerald-400' :
+            modelStatus.stage === 'checking' ? 'bg-amber-400 animate-pulse' :
+            modelStatus.stage === 'loading' ? 'bg-blue-400 animate-pulse' :
+            modelStatus.stage === 'error' ? 'bg-red-400' :
+            'bg-white/20'
+          }`} />
+          <span className="text-[10px] text-white/20">{modelStatus.stage}</span>
+        </div>
       </div>
-
-      {/* 设置面板 */}
-      {showSettings && (
-        <SettingsPanel onClose={() => setShowSettings(false)} />
-      )}
-
     </div>
   );
 }

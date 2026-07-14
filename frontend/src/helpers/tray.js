@@ -1,147 +1,53 @@
-const { Tray, Menu, nativeImage } = require("electron");
-const path = require("path");
+const { Tray, Menu, nativeImage, app } = require('electron');
+const path = require('path');
+const fs = require('fs');
 
 class TrayManager {
-  constructor(logger = null) {
+  constructor(logger) {
+    this.logger = logger;
     this.tray = null;
     this.mainWindow = null;
     this.controlPanelWindow = null;
-    this.createControlPanelCallback = null;
-    this.logger = logger;
+    this.onShowControlPanel = null;
   }
 
-  setWindows(mainWindow, controlPanelWindow) {
-    this.mainWindow = mainWindow;
-    this.controlPanelWindow = controlPanelWindow;
-  }
-
-  setCreateControlPanelCallback(callback) {
-    this.createControlPanelCallback = callback;
-  }
+  setWindows(main, ctrl) { this.mainWindow = main; this.controlPanelWindow = ctrl; }
+  setCreateControlPanelCallback(cb) { this.onShowControlPanel = cb; }
 
   async createTray() {
-    try {
-      // 创建托盘图标
-      const iconPath = this.getTrayIconPath();
-      let trayIcon;
-      
-      if (iconPath && require("fs").existsSync(iconPath)) {
-        trayIcon = nativeImage.createFromPath(iconPath);
-        if (process.platform === "darwin") {
-          trayIcon = trayIcon.resize({ width: 16, height: 16 });
-          trayIcon.setTemplateImage(true);
-        } else if (process.platform === "linux") {
-          trayIcon = trayIcon.resize({ width: 22, height: 22 });
-        }
-      } else {
-        // 如果图标文件不存在，创建一个简单的图标
-        trayIcon = nativeImage.createEmpty();
-      }
-
-      this.tray = new Tray(trayIcon);
-      this.tray.setToolTip("蛐蛐 - 中文语音转文字");
-
-      // 创建上下文菜单
-      this.updateContextMenu();
-
-      // 设置点击事件
-      this.tray.on("click", () => {
-        if (this.mainWindow) {
-          if (this.mainWindow.isVisible()) {
-            this.mainWindow.hide();
-          } else {
-            this.mainWindow.show();
-            this.mainWindow.focus();
-          }
-        }
-      });
-
-      this.tray.on("right-click", () => {
-        this.tray.popUpContextMenu();
-      });
-
-    } catch (error) {
-      if (this.logger && this.logger.error) {
-        this.logger.error("创建托盘失败:", error);
-      }
+    const iconPath = path.join(__dirname, '..', '..', 'assets', 'icon.png');
+    let icon = nativeImage.createEmpty();
+    if (fs.existsSync(iconPath)) {
+      icon = nativeImage.createFromPath(iconPath);
+      icon = icon.resize({ width: process.platform === 'darwin' ? 16 : 22, height: process.platform === 'darwin' ? 16 : 22 });
     }
+    this.tray = new Tray(icon);
+    this.tray.setToolTip('蛐蛐 - 中文语音转文字');
+    this._updateMenu();
+    this.tray.on('click', () => {
+      if (!this.mainWindow) return;
+      this.mainWindow.isVisible() ? this.mainWindow.hide() : (this.mainWindow.show(), this.mainWindow.focus());
+    });
+    this.tray.on('right-click', () => this.tray?.popUpContextMenu());
   }
 
-  getTrayIconPath() {
-    // 用相对路径（dev 和 asar 打包均有效）
-    return path.join(__dirname, "..", "..", "assets", "icon.png");
-  }
-
-  updateContextMenu() {
+  _updateMenu() {
     if (!this.tray) return;
-
-    const contextMenu = Menu.buildFromTemplate([
-      {
-        label: "显示主窗口",
-        click: () => {
-          if (this.mainWindow) {
-            this.mainWindow.show();
-            this.mainWindow.focus();
-          }
-        }
-      },
-      {
-        label: "控制面板",
-        click: () => {
-          if (this.controlPanelWindow) {
-            this.controlPanelWindow.show();
-            this.controlPanelWindow.focus();
-          } else if (this.createControlPanelCallback) {
-            this.createControlPanelCallback().then(() => {
-              if (this.controlPanelWindow) {
-                this.controlPanelWindow.show();
-              }
-            });
-          }
-        }
-      },
-      { type: "separator" },
-      {
-        label: "关于",
-        click: () => {
-          // TODO: 显示关于对话框
-        }
-      },
-      { type: "separator" },
-      {
-        label: "退出",
-        click: () => {
-          require("electron").app.quit();
-        }
-      }
-    ]);
-
-    this.tray.setContextMenu(contextMenu);
+    this.tray.setContextMenu(Menu.buildFromTemplate([
+      { label: '显示主窗口', click: () => { this.mainWindow?.show(); this.mainWindow?.focus(); } },
+      { label: '控制面板', click: () => { this.controlPanelWindow ? (this.controlPanelWindow.show(), this.controlPanelWindow.focus()) : this.onShowControlPanel?.(); } },
+      { type: 'separator' },
+      { label: '退出蛐蛐', click: () => app.quit() },
+    ]));
   }
 
-  destroy() {
-    if (this.tray) {
-      this.tray.destroy();
-      this.tray = null;
-    }
-  }
-
-  setStatus(status) {
+  setStatus(s) {
     if (!this.tray) return;
-
-    switch (status) {
-      case "recording":
-        this.tray.setToolTip("蛐蛐 - 正在录音...");
-        break;
-      case "processing":
-        this.tray.setToolTip("蛐蛐 - 正在处理...");
-        break;
-      case "ready":
-      default:
-        this.tray.setToolTip("蛐蛐 - 中文语音转文字");
-        break;
-    }
+    const tips = { recording: '蛐蛐 - 正在录音...', processing: '蛐蛐 - 正在处理...' };
+    this.tray.setToolTip(tips[s] || '蛐蛐 - 中文语音转文字');
   }
+
+  destroy() { this.tray?.destroy(); this.tray = null; }
 }
 
 module.exports = TrayManager;

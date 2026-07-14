@@ -4,180 +4,39 @@ const os = require('os');
 
 class LogManager {
   constructor() {
-    this.logDir = this.getLogDirectory();
+    this.logDir = path.join(os.homedir(), '.config', 'ququ', 'logs');
     this.logFile = path.join(this.logDir, 'app.log');
     this.funasrLogFile = path.join(this.logDir, 'funasr.log');
-    this.ensureLogDirectory();
+    try { fs.mkdirSync(this.logDir, { recursive: true }); } catch (_) {}
   }
 
-  getLogDirectory() {
-    // 在用户目录下创建日志文件夹
-    const userDataPath = require('electron').app.getPath('userData');
-    return path.join(userDataPath, 'logs');
+  _write(level, message, data = null, file = null) {
+    const entry = { timestamp: new Date().toISOString(), level, message, data, pid: process.pid };
+    const line = JSON.stringify(entry) + '\n';
+    console[level](`[${entry.timestamp}] ${message}`, data ?? '');
+    try { fs.appendFileSync(file || this.logFile, line); } catch (_) {}
   }
 
-  ensureLogDirectory() {
-    try {
-      if (!fs.existsSync(this.logDir)) {
-        fs.mkdirSync(this.logDir, { recursive: true });
-      }
-    } catch (error) {
-      console.error('创建日志目录失败:', error);
-    }
+  info(msg, data) { this._write('info', msg, data); }
+  error(msg, data) { this._write('error', msg, data); }
+  warn(msg, data) { this._write('warn', msg, data); }
+  debug(msg, data) { this._write('debug', msg, data); }
+  logFunASR(level, message, data) {
+    this._write(level, `[FunASR] ${message}`, data, this.funasrLogFile);
   }
 
-  log(level, message, data = null) {
-    const timestamp = new Date().toISOString();
-    const logEntry = {
-      timestamp,
-      level,
-      message,
-      data,
-      pid: process.pid
-    };
-
-    // 输出到控制台
-    console[level](`[${timestamp}] ${message}`, data || '');
-
-    // 写入日志文件
-    try {
-      const logLine = JSON.stringify(logEntry) + '\n';
-      fs.appendFileSync(this.logFile, logLine);
-    } catch (error) {
-      console.error('写入日志文件失败:', error);
-    }
-  }
-
-  info(message, data) {
-    this.log('info', message, data);
-  }
-
-  error(message, data) {
-    this.log('error', message, data);
-  }
-
-  warn(message, data) {
-    this.log('warn', message, data);
-  }
-
-  debug(message, data) {
-    this.log('debug', message, data);
-  }
-
-  // 记录FunASR相关日志
-  logFunASR(level, message, data = null) {
-    const timestamp = new Date().toISOString();
-    const logEntry = {
-      timestamp,
-      level,
-      message,
-      data,
-      source: 'FunASR'
-    };
-
-    console[level](`[FunASR] ${message}`, data || '');
-
-    try {
-      const logLine = JSON.stringify(logEntry) + '\n';
-      fs.appendFileSync(this.funasrLogFile, logLine);
-    } catch (error) {
-      console.error('写入FunASR日志文件失败:', error);
-    }
-  }
-
-  // 获取最近的日志
   getRecentLogs(lines = 100) {
-    try {
-      if (!fs.existsSync(this.logFile)) {
-        return [];
-      }
-
-      const content = fs.readFileSync(this.logFile, 'utf8');
-      const logLines = content.trim().split('\n').filter(line => line.trim());
-      
-      return logLines
-        .slice(-lines)
-        .map(line => {
-          try {
-            return JSON.parse(line);
-          } catch {
-            return { message: line, timestamp: new Date().toISOString() };
-          }
-        });
-    } catch (error) {
-      console.error('读取日志文件失败:', error);
-      return [];
-    }
+    try { return fs.readFileSync(this.logFile, 'utf8').trim().split('\n').slice(-lines).map(l => { try { return JSON.parse(l); } catch { return { message: l }; } }); } catch { return []; }
   }
 
-  // 获取FunASR日志
-  getFunASRLogs(lines = 100) {
-    try {
-      if (!fs.existsSync(this.funasrLogFile)) {
-        return [];
-      }
+  getLogFilePath() { return this.logFile; }
+  getFunASRLogFilePath() { return this.funasrLogFile; }
 
-      const content = fs.readFileSync(this.funasrLogFile, 'utf8');
-      const logLines = content.trim().split('\n').filter(line => line.trim());
-      
-      return logLines
-        .slice(-lines)
-        .map(line => {
-          try {
-            return JSON.parse(line);
-          } catch {
-            return { message: line, timestamp: new Date().toISOString() };
-          }
-        });
-    } catch (error) {
-      console.error('读取FunASR日志文件失败:', error);
-      return [];
-    }
-  }
-
-  // 清理旧日志
-  cleanOldLogs(daysToKeep = 7) {
-    try {
-      const cutoffTime = Date.now() - (daysToKeep * 24 * 60 * 60 * 1000);
-      
-      [this.logFile, this.funasrLogFile].forEach(logFile => {
-        if (fs.existsSync(logFile)) {
-          const stats = fs.statSync(logFile);
-          if (stats.mtime.getTime() < cutoffTime) {
-            fs.unlinkSync(logFile);
-            this.info(`清理旧日志文件: ${logFile}`);
-          }
-        }
-      });
-    } catch (error) {
-      console.error('清理旧日志失败:', error);
-    }
-  }
-
-  // 获取日志文件路径
-  getLogFilePath() {
-    return this.logFile;
-  }
-
-  getFunASRLogFilePath() {
-    return this.funasrLogFile;
-  }
-
-  // 获取系统信息用于调试
   getSystemInfo() {
     return {
-      platform: process.platform,
-      arch: process.arch,
-      nodeVersion: process.version,
-      electronVersion: process.versions.electron,
-      appVersion: require('electron').app.getVersion(),
-      userDataPath: require('electron').app.getPath('userData'),
-      logDir: this.logDir,
-      env: {
-        NODE_ENV: process.env.NODE_ENV,
-        PATH: process.env.PATH,
-        PYTHON_PATH: process.env.PYTHON_PATH
-      }
+      platform: process.platform, arch: process.arch, nodeVersion: process.version,
+      electronVersion: process.versions.electron, logDir: this.logDir,
+      env: { NODE_ENV: process.env.NODE_ENV },
     };
   }
 }

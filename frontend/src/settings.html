@@ -1,13 +1,19 @@
 <!DOCTYPE html>
-<html lang="zh-CN">
+<html lang="zh-CN" class="dark">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>设置</title>
-    <link rel="stylesheet" href="./index.css">
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>设置 - 蛐蛐</title>
+  <style>
+    body { margin: 0; padding: 0; background: #0a0a0f; font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'PingFang SC', 'Microsoft YaHei', sans-serif; }
+    #settings-root { width: 100vw; height: 100vh; }
+    ::-webkit-scrollbar { width: 4px; }
+    ::-webkit-scrollbar-track { background: transparent; }
+    ::-webkit-scrollbar-thumb { background: rgba(255,255,255,0.1); border-radius: 2px; }
+  </style>
 </head>
 <body>
-    <div id="settings-root"></div>
-    <script type="module" src="./settings.jsx"></script>
+  <div id="settings-root"></div>
+  <script type="module" src="./settings.jsx"></script>
 </body>
 </html>

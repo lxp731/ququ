@@ -1,260 +1,185 @@
-import React from "react";
-import { createRoot } from "react-dom/client";
-import "./index.css";
-import HistoryModal from "./components/ui/history-modal";
+import React, { useState, useEffect } from 'react';
+import { createRoot } from 'react-dom/client';
+import { motion, AnimatePresence } from 'framer-motion';
+import { toast, Toaster } from 'sonner';
+import { Search, Copy, Trash2, Download, Clock, History, FileText, ChevronRight } from 'lucide-react';
+import './index.css';
 
-// 历史记录页面组件
-const HistoryPage = () => {
-  const handleCopy = async (text) => {
-    try {
-      if (window.electronAPI) {
-        await window.electronAPI.copyText(text);
-        // 可以添加一个简单的提示
-        const toast = document.createElement('div');
-        toast.textContent = '文本已复制到剪贴板';
-        toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-lg shadow-lg z-50';
-        document.body.appendChild(toast);
-        setTimeout(() => {
-          document.body.removeChild(toast);
-        }, 2000);
-      } else {
-        await navigator.clipboard.writeText(text);
-      }
-    } catch (error) {
-      console.error("复制失败:", error);
-    }
-  };
-
-  const handleClose = () => {
-    if (window.electronAPI) {
-      window.electronAPI.closeHistoryWindow();
-    }
-  };
-
-  return (
-    <div className="min-h-screen bg-gradient-to-br from-slate-50 to-gray-100 dark:from-gray-900 dark:to-gray-800">
-      {/* 使用历史记录组件，但作为全屏页面而不是模态框 */}
-      <div className="h-screen flex flex-col">
-        {/* 标题栏 */}
-        <div className="flex items-center justify-between p-6 border-b border-gray-200 dark:border-gray-700 bg-white dark:bg-gray-800 shadow-sm">
-          <div className="flex items-center space-x-3">
-            <h1 className="text-2xl font-bold text-gray-900 dark:text-gray-100 chinese-title">蛐蛐 - 转录历史</h1>
-          </div>
-          <button
-            onClick={handleClose}
-            className="px-4 py-2 text-gray-600 dark:text-gray-400 hover:text-gray-800 dark:hover:text-gray-200 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-          >
-            关闭窗口
-          </button>
-        </div>
-
-        {/* 历史记录内容 */}
-        <div className="flex-1 overflow-hidden">
-          <HistoryContent onCopy={handleCopy} />
-        </div>
-      </div>
-    </div>
-  );
+const formatDate = (dateStr) => {
+  const d = new Date(dateStr);
+  const now = new Date();
+  const diff = Math.ceil(Math.abs(now - d) / (1000 * 60 * 60 * 24));
+  const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
+  if (diff === 0) return `今天 ${time}`;
+  if (diff === 1) return `昨天 ${time}`;
+  if (diff <= 7) return `${diff - 1}天前`;
+  return d.toLocaleDateString('zh-CN', { month: 'short', day: 'numeric' }) + ` ${time}`;
 };
 
-// 历史记录内容组件
-const HistoryContent = ({ onCopy }) => {
-  const [transcriptions, setTranscriptions] = React.useState([]);
-  const [loading, setLoading] = React.useState(false);
-  const [searchQuery, setSearchQuery] = React.useState("");
-  const [filteredTranscriptions, setFilteredTranscriptions] = React.useState([]);
+const HistoryPage = () => {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(false);
+  const [search, setSearch] = useState('');
+  const [selected, setSelected] = useState(null);
 
-  // 加载转录历史
-  const loadTranscriptions = async () => {
+  const load = async () => {
     if (!window.electronAPI) return;
-    
     setLoading(true);
     try {
-      const result = await window.electronAPI.getTranscriptions(100, 0);
-      setTranscriptions(result || []);
-      setFilteredTranscriptions(result || []);
-    } catch (error) {
-      console.error("加载历史记录失败:", error);
-    } finally {
-      setLoading(false);
-    }
+      const r = await window.electronAPI.getTranscriptions(200, 0);
+      setItems(r || []);
+    } catch (_) { }
+    finally { setLoading(false); }
   };
 
-  // 搜索功能
-  React.useEffect(() => {
-    if (!searchQuery.trim()) {
-      setFilteredTranscriptions(transcriptions);
-    } else {
-      const filtered = transcriptions.filter(item => 
-        item.text?.toLowerCase().includes(searchQuery.toLowerCase()) ||
-        item.processed_text?.toLowerCase().includes(searchQuery.toLowerCase())
-      );
-      setFilteredTranscriptions(filtered);
-    }
-  }, [searchQuery, transcriptions]);
+  useEffect(() => { load(); }, []);
 
-  // 组件挂载时加载数据
-  React.useEffect(() => {
-    loadTranscriptions();
-  }, []);
+  const filtered = search.trim()
+    ? items.filter(i => i.text?.includes(search) || i.raw_text?.includes(search) || i.processed_text?.includes(search))
+    : items;
 
-  // 删除转录记录
+  const handleCopy = async (text) => {
+    try {
+      if (window.electronAPI) await window.electronAPI.copyText(text);
+      else await navigator.clipboard.writeText(text);
+      toast.success('已复制到剪贴板');
+    } catch (_) { toast.error('复制失败'); }
+  };
+
   const handleDelete = async (id) => {
     if (!window.electronAPI) return;
-    
     try {
       await window.electronAPI.deleteTranscription(id);
-      setTranscriptions(prev => prev.filter(item => item.id !== id));
-    } catch (error) {
-      console.error("删除记录失败:", error);
-    }
+      setItems(prev => prev.filter(i => i.id !== id));
+      if (selected?.id === id) setSelected(null);
+      toast.success('已删除');
+    } catch (_) { toast.error('删除失败'); }
   };
 
-  // 格式化日期
-  const formatDate = (dateString) => {
-    const date = new Date(dateString);
-    const now = new Date();
-    const diffTime = Math.abs(now - date);
-    const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-
-    if (diffDays === 1) {
-      return `今天 ${date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
-    } else if (diffDays === 2) {
-      return `昨天 ${date.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' })}`;
-    } else if (diffDays <= 7) {
-      return `${diffDays - 1}天前`;
-    } else {
-      return date.toLocaleDateString('zh-CN', { 
-        month: 'short', 
-        day: 'numeric',
-        hour: '2-digit',
-        minute: '2-digit'
-      });
-    }
+  const handleExport = async () => {
+    if (!window.electronAPI) return;
+    try {
+      await window.electronAPI.exportTranscriptions('txt');
+      toast.success('导出成功');
+    } catch (_) { toast.error('导出失败'); }
   };
 
   return (
-    <div className="h-full flex flex-col">
-      {/* 搜索栏 */}
-      <div className="p-6 bg-white dark:bg-gray-800 border-b border-gray-100 dark:border-gray-700">
-        <div className="max-w-4xl mx-auto">
-          <div className="relative">
-            <svg className="absolute left-3 top-1/2 transform -translate-y-1/2 w-4 h-4 text-gray-400 dark:text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
-            </svg>
-            <input
-              type="text"
-              placeholder="搜索转录内容..."
-              value={searchQuery}
-              onChange={(e) => setSearchQuery(e.target.value)}
-              className="w-full pl-10 pr-4 py-3 border border-gray-300 dark:border-gray-600 bg-white dark:bg-gray-700 text-gray-900 dark:text-white rounded-lg focus:ring-2 focus:ring-blue-500 focus:border-transparent chinese-text text-lg"
-            />
-          </div>
-          <div className="mt-3 flex items-center justify-between">
-            <span className="text-sm text-gray-600 dark:text-gray-400">
-              共 {filteredTranscriptions.length} 条记录
-            </span>
-            <button
-              onClick={() => {
-                if (window.electronAPI) {
-                  window.electronAPI.exportTranscriptions('txt');
-                }
-              }}
-              className="px-4 py-2 bg-blue-500 hover:bg-blue-600 dark:bg-blue-600 dark:hover:bg-blue-700 text-white rounded-lg transition-colors text-sm"
-            >
-              导出全部
-            </button>
-          </div>
+    <div className="h-screen animated-bg flex flex-col">
+      <Toaster theme="dark" position="top-center" richColors />
+
+      {/* Header */}
+      <div className="glass border-b-0 rounded-none px-6 py-4 flex items-center justify-between flex-shrink-0">
+        <div className="flex items-center gap-3">
+          <History className="w-5 h-5 text-indigo-400" />
+          <h1 className="text-lg font-bold text-white">转录历史</h1>
+          <span className="text-xs text-white/20">({filtered.length})</span>
+        </div>
+        <button onClick={handleExport} className="p-2 rounded-lg hover:bg-white/10 transition-colors" title="导出">
+          <Download className="w-4 h-4 text-white/50" />
+        </button>
+      </div>
+
+      {/* Search */}
+      <div className="px-6 py-4 flex-shrink-0">
+        <div className="relative max-w-2xl mx-auto">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/20" />
+          <input
+            type="text" value={search} onChange={e => setSearch(e.target.value)}
+            placeholder="搜索转录内容..."
+            className="w-full pl-10 pr-4 py-2.5 text-sm bg-white/[0.04] border border-white/[0.08] rounded-xl focus:ring-2 focus:ring-indigo-500/50 focus:border-transparent text-white placeholder-white/20 transition-all"
+          />
         </div>
       </div>
 
-      {/* 内容区域 */}
-      <div className="flex-1 overflow-y-auto p-6">
-        <div className="max-w-4xl mx-auto">
+      {/* Content */}
+      <div className="flex-1 overflow-y-auto min-h-0 px-6 pb-6">
+        <div className="max-w-3xl mx-auto">
           {loading ? (
-            <div className="flex items-center justify-center py-12">
-              <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-              <span className="ml-3 text-gray-600 dark:text-gray-400">加载中...</span>
+            <div className="flex items-center justify-center py-20">
+              <div className="w-5 h-5 border-2 border-indigo-400/60 border-t-transparent rounded-full animate-spin" />
             </div>
-          ) : filteredTranscriptions.length === 0 ? (
-            <div className="text-center py-12">
-              <svg className="w-12 h-12 text-gray-300 dark:text-gray-600 mx-auto mb-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-              </svg>
-              <p className="text-gray-500 dark:text-gray-400 chinese-text text-lg">
-                {searchQuery ? "没有找到匹配的记录" : "暂无转录历史"}
-              </p>
+          ) : filtered.length === 0 ? (
+            <div className="text-center py-20">
+              <FileText className="w-10 h-10 text-white/10 mx-auto mb-3" />
+              <p className="text-sm text-white/30">{search ? '无匹配记录' : '暂无转录历史'}</p>
             </div>
           ) : (
-            <div className="space-y-4">
-              {filteredTranscriptions.map((item) => (
-                <div
-                  key={item.id}
-                  className="bg-white dark:bg-gray-800 rounded-lg p-6 shadow-sm hover:shadow-md transition-shadow border border-gray-200 dark:border-gray-700"
-                >
-                  <div className="flex items-start justify-between mb-4">
-                    <div className="flex items-center space-x-3 text-sm text-gray-500 dark:text-gray-400">
-                      <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
-                      </svg>
-                      <span>{formatDate(item.created_at)}</span>
-                      {item.confidence && (
-                        <span className="bg-blue-100 dark:bg-blue-900/50 text-blue-700 dark:text-blue-300 px-2 py-1 rounded text-xs">
-                          置信度: {Math.round(item.confidence * 100)}%
-                        </span>
+            <div className="space-y-2">
+              <AnimatePresence>
+                {filtered.map((item, idx) => (
+                  <motion.div
+                    key={item.id}
+                    initial={{ opacity: 0, y: 8 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    exit={{ opacity: 0, x: -20 }}
+                    transition={{ delay: idx * 0.02 }}
+                    className={`glass-light p-4 cursor-pointer transition-all hover:border-white/20 ${selected?.id === item.id ? 'border-indigo-400/30 bg-indigo-500/[0.04]' : ''}`}
+                    onClick={() => setSelected(selected?.id === item.id ? null : item)}
+                  >
+                    <div className="flex items-start justify-between">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 mb-1.5">
+                          <Clock className="w-3 h-3 text-white/25" />
+                          <span className="text-[10px] text-white/30">{formatDate(item.created_at)}</span>
+                          {item.confidence > 0 && (
+                            <span className="text-[10px] px-1.5 py-0.5 rounded bg-white/[0.04] text-white/30">
+                              {(item.confidence * 100).toFixed(0)}%
+                            </span>
+                          )}
+                        </div>
+                        <p className="text-sm text-white/70 line-clamp-2 leading-relaxed">
+                          {item.processed_text || item.text}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1 ml-3 flex-shrink-0" onClick={e => e.stopPropagation()}>
+                        <button onClick={() => handleCopy(item.processed_text || item.text)}
+                          className="p-1.5 rounded-lg hover:bg-white/10 transition-colors" title="复制">
+                          <Copy className="w-3.5 h-3.5 text-white/30" />
+                        </button>
+                        <button onClick={() => handleDelete(item.id)}
+                          className="p-1.5 rounded-lg hover:bg-red-500/20 transition-colors" title="删除">
+                          <Trash2 className="w-3.5 h-3.5 text-red-400/50" />
+                        </button>
+                        <ChevronRight className={`w-3.5 h-3.5 text-white/20 transition-transform ${selected?.id === item.id ? 'rotate-90' : ''}`} />
+                      </div>
+                    </div>
+
+                    {/* Expanded detail */}
+                    <AnimatePresence>
+                      {selected?.id === item.id && (
+                        <motion.div
+                          initial={{ height: 0, opacity: 0 }}
+                          animate={{ height: 'auto', opacity: 1 }}
+                          exit={{ height: 0, opacity: 0 }}
+                          className="overflow-hidden"
+                        >
+                          <div className="mt-3 pt-3 border-t border-white/[0.06] space-y-2">
+                            {item.raw_text && item.raw_text !== item.text && (
+                              <div>
+                                <span className="text-[10px] text-white/25 uppercase tracking-wider">原始识别</span>
+                                <p className="text-xs text-white/40 mt-1 leading-relaxed">{item.raw_text}</p>
+                              </div>
+                            )}
+                            {item.processed_text && item.processed_text !== item.text && (
+                              <div>
+                                <span className="text-[10px] text-indigo-300/50 uppercase tracking-wider">AI 优化</span>
+                                <p className="text-xs text-indigo-300/70 mt-1 leading-relaxed">{item.processed_text}</p>
+                              </div>
+                            )}
+                            {(item.duration > 0 || item.file_size > 0) && (
+                              <div className="flex gap-4 text-[10px] text-white/20">
+                                {item.duration > 0 && <span>时长: {item.duration.toFixed(1)}s</span>}
+                                {item.file_size > 0 && <span>大小: {(item.file_size / 1024).toFixed(1)}KB</span>}
+                              </div>
+                            )}
+                          </div>
+                        </motion.div>
                       )}
-                    </div>
-                    <div className="flex space-x-2">
-                      <button
-                        onClick={() => onCopy(item.processed_text || item.text)}
-                        className="p-2 hover:bg-gray-100 dark:hover:bg-gray-700 rounded-lg transition-colors"
-                        title="复制文本"
-                      >
-                        <svg className="w-4 h-4 text-gray-600 dark:text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M8 16H6a2 2 0 01-2-2V6a2 2 0 012-2h8a2 2 0 012 2v2m-6 12h8a2 2 0 002-2v-8a2 2 0 00-2-2h-8a2 2 0 00-2 2v8a2 2 0 002 2z" />
-                        </svg>
-                      </button>
-                      <button
-                        onClick={() => handleDelete(item.id)}
-                        className="p-2 hover:bg-red-100 dark:hover:bg-red-900/30 rounded-lg transition-colors"
-                        title="删除记录"
-                      >
-                        <svg className="w-4 h-4 text-red-500 dark:text-red-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                        </svg>
-                      </button>
-                    </div>
-                  </div>
-
-                  {/* 最终文本 */}
-                  <div className="mb-4">
-                    <h4 className="text-sm font-medium text-gray-800 dark:text-gray-200 mb-2">最终结果:</h4>
-                    <p className="chinese-content leading-relaxed bg-gray-50 dark:bg-gray-700/60 p-4 rounded-lg border dark:border-gray-600/30">
-                      {item.text}
-                    </p>
-                  </div>
-
-                  {/* AI优化文本 */}
-                  {item.processed_text && item.processed_text.trim() !== (item.raw_text || '').trim() && (
-                    <div className="mb-4">
-                      <h4 className="text-sm font-medium text-emerald-700 dark:text-emerald-400 mb-2">AI优化:</h4>
-                      <p className="chinese-content leading-relaxed bg-emerald-50 dark:bg-emerald-900/20 p-4 rounded-lg border border-emerald-200 dark:border-emerald-700">
-                        {item.processed_text}
-                      </p>
-                    </div>
-                  )}
-
-                  {/* 原始识别文本 */}
-                  {item.raw_text && item.raw_text.trim() !== item.text.trim() && (
-                    <div>
-                      <h4 className="text-sm font-medium text-gray-500 dark:text-gray-400 mb-2">原始识别:</h4>
-                      <p className="text-xs chinese-content leading-relaxed bg-gray-100 dark:bg-gray-700/40 p-3 rounded-lg border dark:border-gray-600/20 text-gray-600 dark:text-gray-200">
-                        {item.raw_text}
-                      </p>
-                    </div>
-                  )}
-                </div>
-              ))}
+                    </AnimatePresence>
+                  </motion.div>
+                ))}
+              </AnimatePresence>
             </div>
           )}
         </div>
@@ -263,7 +188,10 @@ const HistoryContent = ({ onCopy }) => {
   );
 };
 
-// 渲染应用
+// Standalone render
 const container = document.getElementById('history-root');
-const root = createRoot(container);
-root.render(<HistoryPage />);
+if (container) {
+  createRoot(container).render(
+    <React.StrictMode><HistoryPage /></React.StrictMode>
+  );
+}

@@ -1,548 +1,113 @@
 @import "tailwindcss";
 
-@layer base {
-  :root {
-    --background: 0 0% 100%;
-    --foreground: 222.2 84% 4.9%;
-    --card: 0 0% 100%;
-    --card-foreground: 222.2 84% 4.9%;
-    --popover: 0 0% 100%;
-    --popover-foreground: 222.2 84% 4.9%;
-    --primary: 221.2 83.2% 53.3%;
-    --primary-foreground: 210 40% 98%;
-    --secondary: 210 40% 96%;
-    --secondary-foreground: 222.2 84% 4.9%;
-    --muted: 210 40% 96%;
-    --muted-foreground: 215.4 16.3% 46.9%;
-    --accent: 210 40% 96%;
-    --accent-foreground: 222.2 84% 4.9%;
-    --destructive: 0 84.2% 60.2%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 214.3 31.8% 91.4%;
-    --input: 214.3 31.8% 91.4%;
-    --ring: 221.2 83.2% 53.3%;
-    --radius: 0.5rem;
-  }
-
-  .dark {
-    --background: 222.2 84% 4.9%;
-    --foreground: 210 40% 98%;
-    --card: 222.2 84% 4.9%;
-    --card-foreground: 210 40% 98%;
-    --popover: 222.2 84% 4.9%;
-    --popover-foreground: 210 40% 98%;
-    --primary: 217.2 91.2% 59.8%;
-    --primary-foreground: 222.2 84% 4.9%;
-    --secondary: 217.2 32.6% 17.5%;
-    --secondary-foreground: 210 40% 98%;
-    --muted: 217.2 32.6% 17.5%;
-    --muted-foreground: 215 20.2% 65.1%;
-    --accent: 217.2 32.6% 17.5%;
-    --accent-foreground: 210 40% 98%;
-    --destructive: 0 62.8% 30.6%;
-    --destructive-foreground: 210 40% 98%;
-    --border: 217.2 32.6% 17.5%;
-    --input: 217.2 32.6% 17.5%;
-    --ring: 224.3 76.3% 94.1%;
-  }
+@theme {
+  --color-glass-50: rgba(255, 255, 255, 0.05);
+  --color-glass-100: rgba(255, 255, 255, 0.08);
+  --color-glass-200: rgba(255, 255, 255, 0.12);
+  --color-glass-300: rgba(255, 255, 255, 0.16);
+  --color-glass-400: rgba(255, 255, 255, 0.24);
+  --color-accent: #818cf8;
+  --color-accent-strong: #6366f1;
+  --color-accent-glow: rgba(99, 102, 241, 0.4);
+  --color-surface: #0a0a0f;
+  --color-surface-raised: #12121a;
 }
 
-@layer base {
-  * {
-    border-color: hsl(var(--border));
-  }
-  body {
-    background-color: hsl(var(--background));
-    color: hsl(var(--foreground));
-    font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'WenQuanYi Micro Hei', system-ui, -apple-system, sans-serif;
-    font-size: 16px;
-    line-height: 1.6;
-  }
-}
+* { box-sizing: border-box; }
 
-/* 全局样式 */
-* {
-  box-sizing: border-box;
-}
-
-html, body {
+body {
   margin: 0;
   padding: 0;
-  height: 100%;
-  font-family: var(--font-family-sans);
-  line-height: var(--line-height-normal);
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
-}
-
-#root {
-  height: 100%;
   background: transparent;
-}
-
-/* 中文文本优化 - 基于WCAG 2.1标准 */
-.chinese-text {
-  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'WenQuanYi Micro Hei', system-ui, -apple-system, sans-serif;
-  line-height: 1.8;
-  letter-spacing: 0.05em;
-  word-break: break-word;
-  overflow-wrap: break-word;
-  font-weight: 400;
-}
-
-/* 中文标题优化 */
-.chinese-title {
-  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'WenQuanYi Micro Hei', system-ui, -apple-system, sans-serif;
-  line-height: 1.4;
-  letter-spacing: 0.1em;
-  font-weight: 600;
-}
-
-/* 中文内容文本优化 */
-.chinese-content {
-  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'WenQuanYi Micro Hei', system-ui, -apple-system, sans-serif;
-  line-height: 2;
-  letter-spacing: 0.08em;
-  font-size: 16px;
-  font-weight: 400;
-}
-
-/* 状态文本优化 */
-.status-text {
-  font-family: 'PingFang SC', 'Hiragino Sans GB', 'Microsoft YaHei', 'WenQuanYi Micro Hei', system-ui, -apple-system, sans-serif;
-  line-height: 1.6;
-  letter-spacing: 0.05em;
-  font-weight: 500;
-  font-size: 15px;
-}
-
-/* 次要文本 - 对比度4.5:1 */
-.text-secondary {
-  color: #4b5563; /* 对比度 7.0:1 */
-}
-
-/* 提示文本 - 对比度4.5:1 */
-.text-muted {
-  color: #6b7280; /* 对比度 4.5:1 */
-}
-
-/* 强调文本 - 高对比度 */
-.text-emphasis {
-  color: #111827; /* 对比度 15.3:1 */
-  font-weight: 600;
-}
-
-/* 录音按钮动画 */
-@keyframes pulse-recording {
-  0%, 100% {
-    opacity: 1;
-    transform: scale(1);
-  }
-  50% {
-    opacity: 0.8;
-    transform: scale(1.05);
-  }
-}
-
-.recording-pulse {
-  animation: pulse-recording 1.5s ease-in-out infinite;
-}
-
-/* 波形动画 */
-@keyframes wave {
-  0%, 100% {
-    height: 0.5rem;
-  }
-  50% {
-    height: 1.5rem;
-  }
-}
-
-.wave-bar {
-  animation: wave 1s ease-in-out infinite;
-}
-
-.wave-bar:nth-child(1) { animation-delay: 0s; }
-.wave-bar:nth-child(2) { animation-delay: 0.1s; }
-.wave-bar:nth-child(3) { animation-delay: 0.2s; }
-.wave-bar:nth-child(4) { animation-delay: 0.3s; }
-
-/* 处理中动画 */
-@keyframes processing {
-  0% {
-    transform: rotate(0deg);
-  }
-  100% {
-    transform: rotate(360deg);
-  }
-}
-
-.processing-spin {
-  animation: processing 1s linear infinite;
-}
-
-/* 文本淡入动画 */
-@keyframes fadeIn {
-  from {
-    opacity: 0;
-    transform: translateY(10px);
-  }
-  to {
-    opacity: 1;
-    transform: translateY(0);
-  }
-}
-
-.fade-in {
-  animation: fadeIn 0.3s ease-out;
-}
-
-/* 自定义滚动条 */
-.custom-scrollbar::-webkit-scrollbar {
-  width: 6px;
-  height: 6px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.1);
-  border-radius: 3px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.3);
-  border-radius: 3px;
-}
-
-.custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.5);
-}
-
-/* 深色模式下的滚动条 */
-.dark .custom-scrollbar::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.1);
-}
-
-.dark .custom-scrollbar::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.3);
-}
-
-.dark .custom-scrollbar::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.5);
-}
-
-/* 防止文本选择 */
-.no-select {
-  -webkit-user-select: none;
-  -moz-user-select: none;
-  -ms-user-select: none;
+  color: #e2e8f0;
+  -webkit-font-smoothing: antialiased;
   user-select: none;
 }
 
-/* 可拖拽区域 */
-.draggable {
-  -webkit-app-region: drag;
+/* ── Glass panel ── */
+.glass {
+  background: rgba(18, 18, 30, 0.7);
+  backdrop-filter: blur(24px) saturate(180%);
+  -webkit-backdrop-filter: blur(24px) saturate(180%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 16px;
 }
 
-.non-draggable {
-  -webkit-app-region: no-drag;
+.glass-light {
+  background: rgba(255, 255, 255, 0.06);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: 12px;
 }
 
-/* 毛玻璃效果 */
-.glass-effect {
-  backdrop-filter: blur(10px);
-  -webkit-backdrop-filter: blur(10px);
-  background: rgba(255, 255, 255, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.2);
+/* ── Mic button pulse ring ── */
+@keyframes mic-pulse {
+  0% { transform: scale(1); opacity: 0.6; }
+  100% { transform: scale(1.8); opacity: 0; }
 }
 
-.dark .glass-effect {
-  background: rgba(0, 0, 0, 0.8);
-  border: 1px solid rgba(255, 255, 255, 0.1);
+.mic-ring {
+  position: absolute;
+  inset: -4px;
+  border-radius: 50%;
+  border: 2px solid rgba(129, 140, 248, 0.6);
+  animation: mic-pulse 1.5s ease-out infinite;
 }
 
-/* 按钮悬停效果 */
-.btn-hover {
-  transition: all 0.2s ease-in-out;
+.mic-ring:nth-child(2) { animation-delay: 0.5s; }
+.mic-ring:nth-child(3) { animation-delay: 1s; }
+
+/* ── Recording glow ── */
+@keyframes glow-pulse {
+  0%, 100% { box-shadow: 0 0 20px rgba(99, 102, 241, 0.3), 0 0 60px rgba(99, 102, 241, 0.1); }
+  50% { box-shadow: 0 0 30px rgba(99, 102, 241, 0.5), 0 0 80px rgba(99, 102, 241, 0.2); }
 }
 
-.btn-hover:hover {
-  transform: translateY(-1px);
-  box-shadow: var(--shadow-lg);
+.recording-glow { animation: glow-pulse 2s ease-in-out infinite; }
+
+/* ── Gradient text ── */
+.gradient-text {
+  background: linear-gradient(135deg, #818cf8 0%, #c084fc 50%, #f472b6 100%);
+  -webkit-background-clip: text;
+  -webkit-text-fill-color: transparent;
+  background-clip: text;
 }
 
-.btn-hover:active {
-  transform: translateY(0);
-  box-shadow: var(--shadow-md);
+/* ── Animated background ── */
+@keyframes bg-shift {
+  0%, 100% { background-position: 0% 50%; }
+  50% { background-position: 100% 50%; }
 }
 
-/* 中文标点符号优化 */
-.chinese-punctuation {
-  font-feature-settings: "halt" 1;
+.animated-bg {
+  background: linear-gradient(270deg, #1e1b4b, #0f172a, #1e1b4b, #0f172a);
+  background-size: 400% 400%;
+  animation: bg-shift 15s ease infinite;
 }
 
-/* 响应式字体大小 */
-@media (max-width: 640px) {
-  .chinese-content {
-    font-size: 14px;
-    line-height: 1.8;
-    letter-spacing: 0.06em;
-  }
-  
-  .chinese-title {
-    font-size: 18px;
-    line-height: 1.3;
-  }
-  
-  .status-text {
-    font-size: 13px;
-  }
+/* ── Wave bars ── */
+@keyframes wave {
+  0%, 100% { height: 4px; }
+  50% { height: 16px; }
 }
 
-@media (min-width: 641px) and (max-width: 1023px) {
-  .chinese-content {
-    font-size: 15px;
-    line-height: 1.9;
-    letter-spacing: 0.07em;
-  }
-  
-  .chinese-title {
-    font-size: 20px;
-    line-height: 1.35;
-  }
-  
-  .status-text {
-    font-size: 14px;
-  }
+.wave-bar { animation: wave 0.8s ease-in-out infinite; }
+
+/* ── Shimmer ── */
+@keyframes shimmer {
+  0% { background-position: -200% 0; }
+  100% { background-position: 200% 0; }
 }
 
-@media (min-width: 1024px) {
-  .chinese-content {
-    font-size: 17px;
-    line-height: 2.1;
-    letter-spacing: 0.08em;
-  }
-  
-  .chinese-title {
-    font-size: 24px;
-    line-height: 1.4;
-  }
-  
-  .status-text {
-    font-size: 16px;
-  }
+.shimmer {
+  background: linear-gradient(90deg, transparent 0%, rgba(255,255,255,0.05) 50%, transparent 100%);
+  background-size: 200% 100%;
+  animation: shimmer 2s infinite;
 }
 
-/* 移除深色模式下的硬编码文本颜色，让Tailwind自动处理 */
+/* ── Theme transition ── */
+* { transition: background-color 0.3s ease, border-color 0.3s ease; }
 
-/* 高对比度模式支持 */
-@media (prefers-contrast: high) {
-  .chinese-content {
-    color: #000000;
-    font-weight: 500;
-  }
-  
-  .chinese-title {
-    color: #000000;
-    font-weight: 700;
-  }
-  
-  .status-text {
-    color: #000000;
-    font-weight: 600;
-  }
-}
-
-@media (prefers-contrast: high) {
-  .dark .chinese-content {
-    color: #ffffff;
-    font-weight: 500;
-  }
-  
-  .dark .chinese-title {
-    color: #ffffff;
-    font-weight: 700;
-  }
-  
-  .dark .status-text {
-    color: #ffffff;
-    font-weight: 600;
-  }
-}
-
-/* 减少动画偏好支持 */
-@media (prefers-reduced-motion: reduce) {
-  .fade-in,
-  .recording-pulse,
-  .wave-bar,
-  .processing-spin {
-    animation: none;
-  }
-  
-  .btn-hover {
-    transition: none;
-  }
-}
-
-/* 文本区域滚动优化 */
-.text-area-scroll {
-  max-height: calc(100vh - 300px);
-  overflow-y: auto;
-  scrollbar-width: thin;
-  scrollbar-color: rgba(0, 0, 0, 0.2) rgba(0, 0, 0, 0.05);
-}
-
-.text-area-scroll::-webkit-scrollbar {
-  width: 8px;
-}
-
-.text-area-scroll::-webkit-scrollbar-track {
-  background: rgba(0, 0, 0, 0.05);
-  border-radius: 4px;
-}
-
-.text-area-scroll::-webkit-scrollbar-thumb {
-  background: rgba(0, 0, 0, 0.2);
-  border-radius: 4px;
-}
-
-.text-area-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(0, 0, 0, 0.4);
-}
-
-/* 深色模式下的文本区域滚动条 */
-.dark .text-area-scroll {
-  scrollbar-color: rgba(255, 255, 255, 0.2) rgba(255, 255, 255, 0.05);
-}
-
-.dark .text-area-scroll::-webkit-scrollbar-track {
-  background: rgba(255, 255, 255, 0.05);
-}
-
-.dark .text-area-scroll::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.2);
-}
-
-.dark .text-area-scroll::-webkit-scrollbar-thumb:hover {
-  background: rgba(255, 255, 255, 0.4);
-}
-
-/* 模型状态指示器动画 */
-@keyframes model-loading {
-  0% {
-    opacity: 0.6;
-    transform: scale(0.95);
-  }
-  50% {
-    opacity: 1;
-    transform: scale(1.05);
-  }
-  100% {
-    opacity: 0.6;
-    transform: scale(0.95);
-  }
-}
-
-.model-loading {
-  animation: model-loading 2s ease-in-out infinite;
-}
-
-/* 模型就绪状态的脉冲效果 */
-@keyframes model-ready-pulse {
-  0% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0.4);
-  }
-  70% {
-    box-shadow: 0 0 0 4px rgba(34, 197, 94, 0);
-  }
-  100% {
-    box-shadow: 0 0 0 0 rgba(34, 197, 94, 0);
-  }
-}
-
-.model-ready {
-  animation: model-ready-pulse 2s infinite;
-}
-
-/* 模型错误状态的闪烁效果 */
-@keyframes model-error-blink {
-  0%, 50% {
-    opacity: 1;
-  }
-  25%, 75% {
-    opacity: 0.5;
-  }
-}
-
-.model-error {
-  animation: model-error-blink 1.5s ease-in-out infinite;
-}
-
-/* 模型状态工具提示增强 */
-.model-status-tooltip {
-  backdrop-filter: blur(8px);
-  -webkit-backdrop-filter: blur(8px);
-  background: rgba(0, 0, 0, 0.85);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-}
-
-/* FunASR准备状态动画 */
-@keyframes preparing-wave {
-  0%, 100% {
-    transform: scaleY(0.3);
-    opacity: 0.6;
-  }
-  50% {
-    transform: scaleY(1);
-    opacity: 1;
-  }
-}
-
-/* FunASR加载状态动画 */
-@keyframes loading-dots {
-  0%, 20% {
-    transform: scaleY(0.4);
-    opacity: 0.5;
-  }
-  40% {
-    transform: scaleY(1);
-    opacity: 1;
-  }
-  60%, 100% {
-    transform: scaleY(0.4);
-    opacity: 0.5;
-  }
-}
-
-/* FunASR错误状态动画 */
-@keyframes error-pulse {
-  0%, 100% {
-    transform: scale(1);
-    opacity: 0.8;
-  }
-  50% {
-    transform: scale(1.1);
-    opacity: 1;
-  }
-}
-
-/* 减少动画偏好支持 - 为新动画添加支持 */
-@media (prefers-reduced-motion: reduce) {
-  .fade-in,
-  .recording-pulse,
-  .wave-bar,
-  .processing-spin {
-    animation: none;
-  }
-  
-  /* 为新的FunASR状态动画添加减少动画支持 */
-  *[style*="preparing-wave"],
-  *[style*="loading-dots"],
-  *[style*="error-pulse"] {
-    animation: none !important;
-  }
-  
-  .btn-hover {
-    transition: none;
-  }
-}
+/* ── Sonner overrides ── */
+[data-sonner-toaster] { font-family: inherit; }
