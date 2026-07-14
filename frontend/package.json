@@ -4,6 +4,7 @@
   "description": "蛐蛐 - 基于FunASR和AI的中文语音转文字应用",
   "main": "main.js",
   "private": true,
+  "repository": "https://github.com/lxp731/ququ",
   "packageManager": "pnpm@9.15.0",
   "scripts": {
     "start": "electron .",
