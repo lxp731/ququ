@@ -69,11 +69,12 @@ async function startApp() {
 
   // 创建窗口
   try { await wm.createMainWindow(); logger.info('主窗口创建成功'); } catch (e) { logger.error('主窗口创建失败:', e); }
-  try { await wm.createControlPanelWindow(); logger.info('控制面板窗口创建成功'); } catch (e) { logger.error('控制面板创建失败:', e); }
+  try { await wm.createSettingsWindow(); logger.info('设置窗口创建成功'); } catch (e) { logger.error('设置窗口创建失败:', e); }
 
   // 托盘
-  tray.setWindows(wm.mainWindow, wm.controlPanelWindow);
-  tray.setCreateControlPanelCallback(() => wm.createControlPanelWindow());
+  tray.setWindows(wm.mainWindow, wm.settingsWindow);
+  tray.setCreateSettingsCallback(() => wm.createSettingsWindow());
+  tray.setQuitCallback(() => { wm.forceQuit(); app.quit(); });
   await tray.createTray();
 
   logger.info('应用启动完成');

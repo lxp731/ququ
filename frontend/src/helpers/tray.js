@@ -7,12 +7,14 @@ class TrayManager {
     this.logger = logger;
     this.tray = null;
     this.mainWindow = null;
-    this.controlPanelWindow = null;
-    this.onShowControlPanel = null;
+    this.settingsWindow = null;
+    this.onShowSettings = null;
+    this.onQuit = null;
   }
 
-  setWindows(main, ctrl) { this.mainWindow = main; this.controlPanelWindow = ctrl; }
-  setCreateControlPanelCallback(cb) { this.onShowControlPanel = cb; }
+  setWindows(main, settings) { this.mainWindow = main; this.settingsWindow = settings; }
+  setCreateSettingsCallback(cb) { this.onShowSettings = cb; }
+  setQuitCallback(cb) { this.onQuit = cb; }
 
   async createTray() {
     const iconPath = path.join(__dirname, '..', '..', 'assets', 'icon.png');
@@ -35,9 +37,9 @@ class TrayManager {
     if (!this.tray) return;
     this.tray.setContextMenu(Menu.buildFromTemplate([
       { label: '显示主窗口', click: () => { this.mainWindow?.show(); this.mainWindow?.focus(); } },
-      { label: '控制面板', click: () => { this.controlPanelWindow ? (this.controlPanelWindow.show(), this.controlPanelWindow.focus()) : this.onShowControlPanel?.(); } },
+      { label: '设置', click: () => { this.settingsWindow ? (this.settingsWindow.show(), this.settingsWindow.focus()) : this.onShowSettings?.(); } },
       { type: 'separator' },
-      { label: '退出蛐蛐', click: () => app.quit() },
+      { label: '退出蛐蛐', click: () => { if (this.onQuit) this.onQuit(); else app.quit(); } },
     ]));
   }
 

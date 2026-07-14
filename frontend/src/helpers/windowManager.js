@@ -11,6 +11,7 @@ class WindowManager {
     this.controlPanelWindow = null;
     this.historyWindow = null;
     this.settingsWindow = null;
+    this._forceQuit = false;
   }
 
   _load(w, devUrl, prodPath, query) {
@@ -49,6 +50,12 @@ class WindowManager {
       }
     }, 3000);
 
+    // 关闭 → 隐藏到托盘，不销毁（托盘期间仍需 webContents 通信）
+    this.mainWindow.on('close', (e) => {
+      if (this._forceQuit) return; // 用户主动退出，不拦截
+      e.preventDefault();
+      this.mainWindow?.hide();
+    });
     this.mainWindow.on('closed', () => {
       clearTimeout(forceShowTimer);
       this.mainWindow = null;
@@ -122,6 +129,11 @@ class WindowManager {
 
   hideSettingsWindow() { this.settingsWindow?.hide(); }
   closeSettingsWindow() { this.settingsWindow?.close(); }
+
+  forceQuit() {
+    this._forceQuit = true;
+    this.closeAllWindows();
+  }
 
   closeAllWindows() {
     this.mainWindow?.close();

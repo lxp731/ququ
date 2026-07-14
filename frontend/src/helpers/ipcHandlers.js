@@ -120,10 +120,12 @@ class IPCHandlers {
 
       this.keyWatcher.start((type, keyName) => {
         this.log?.info?.(`[Hold] 全局 ${type}: ${keyName}`);
+        const wc = this.wm.mainWindow?.webContents;
+        if (!wc || wc.isDestroyed()) return;
         if (type === 'down') {
-          win.webContents.send('hold-key-down', { key: keyName });
+          wc.send('hold-key-down', { key: keyName });
         } else if (type === 'up') {
-          win.webContents.send('hold-key-up', { key: keyName });
+          wc.send('hold-key-up', { key: keyName });
         }
       });
       return { success: true };
