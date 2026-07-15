@@ -35,8 +35,8 @@ ENV UV_LINK_MODE=copy
 COPY pyproject.toml .
 RUN uv sync --no-dev --no-editable
 
-# 应用代码
-COPY funasr_server.py download_models.py ./
+# 应用代码 + 入口脚本
+COPY funasr_server.py download_models.py entrypoint.sh ./
 
 # 运行环境
 ENV PYTHONDONTWRITEBYTECODE=1
@@ -47,7 +47,4 @@ ENV DAMO_ROOT=/models/hub/damo
 
 EXPOSE 8000
 
-CMD ["uv", "run", "gunicorn", "--bind", "0.0.0.0:8000", \
-     "--workers", "1", "--threads", "4", \
-     "--timeout", "300", "--graceful-timeout", "30", \
-     "funasr_server:app"]
+CMD ["/bin/bash", "/app/entrypoint.sh"]
