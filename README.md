@@ -19,10 +19,7 @@
 
 ## 效果演示
 
-<div align="center">
-  <video src="https://img.liuxp.eu.org/file/BAACAgUAAyEGAATfDMmJAAMJaleyqclBxh752VthJfjs66Rl3CgAAlUfAAKMysFWX-CPEI441Sw9BA.mp4" width="800" controls autoplay muted loop></video>
-</div>
-
+![效果演示](assets/ququ.gif)
 
 ---
 
