@@ -2,10 +2,6 @@
 
 此文件为在此代码库中工作的AI助手提供指导。
 
-## 项目管理
-
-- **GitHub Project**: https://github.com/users/yan5xu/projects/2
-
 ## 目录结构
 
 ```
