@@ -19,7 +19,10 @@
 
 ## 效果演示
 
-[![效果演示](https://img.liuxp.eu.org/file/AgACAgUAAyEGAATfDMmJAAMIalevaQUuSJJBqvN-3eAKQj3QTcQAAioQaxuMysFWkFm11Ip_ztwBAAMCAAN3AAM9BA.png)](https://img.liuxp.eu.org/file/BAACAgUAAyEGAATfDMmJAAMGaleowTaZkiOoHeoPGXefTY19DgcAAkUfAAKMysFWWEtIEdCSASw9BA.mp4)
+<div align="center">
+  <video src="https://img.liuxp.eu.org/file/BAACAgUAAyEGAATfDMmJAAMJaleyqclBxh752VthJfjs66Rl3CgAAlUfAAKMysFWX-CPEI441Sw9BA.mp4" width="800" controls autoplay muted loop></video>
+</div>
+
 
 ---
 
