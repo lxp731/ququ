@@ -115,10 +115,11 @@ class IPCHandlers {
     ipcMain.handle('set-recording-state', (_, v) => { this.hotkey.setRecordingState(v); return { success: true }; });
     ipcMain.handle('get-recording-state', () => ({ success: true, isRecording: this.hotkey.getRecordingState() }));
 
-    // ── 长按模式：evdev 全局监听 keydown+keyup（替代 globalShortcut）──
-    // 同时注销全局快捷键，避免双触发
+    // ── 长按模式：全局键盘监听 keydown+keyup（替代 globalShortcut）──
+    // Linux: evdev   Windows: GetAsyncKeyState   macOS: 不支持
     ipcMain.handle('start-hold-watch', () => {
       if (!this.keyWatcher) return { success: false, error: 'KeyWatcher 不可用' };
+      if (process.platform === 'darwin') return { success: false, error: 'macOS 暂不支持长按模式' };
       const win = this.wm.mainWindow;
       if (!win) return { success: false };
 

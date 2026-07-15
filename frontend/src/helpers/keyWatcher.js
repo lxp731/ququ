@@ -1,4 +1,7 @@
-// Linux evdev 全局键盘监听 — Python 子进程读取 /dev/input/event*
+// 全局键盘监听（长按模式）
+// Linux:   Python 子进程读取 /dev/input/event* (evdev)
+// Windows: PowerShell 子进程通过 C# P/Invoke GetAsyncKeyState 轮询
+// macOS:   不支持（静默跳过）
 const { spawn } = require('child_process');
 const fs = require('fs');
 const path = require('path');
@@ -27,13 +30,22 @@ class KeyWatcher {
     if (this._child) return;
     this._onKeyEvent = onKeyEvent;
 
+    if (process.platform === 'linux') {
+      this._startLinux();
+    } else if (process.platform === 'win32') {
+      this._startWindows();
+    } else {
+      this.log?.info?.('[KeyWatcher] 当前平台不支持键盘监听');
+    }
+  }
+
+  // ── Linux: evdev ──
+  _startLinux() {
     const device = this._findKeyboard();
     if (!device) { this.log?.error?.('[KeyWatcher] 找不到键盘设备'); return; }
     this._device = device;
     this.log?.info?.(`[KeyWatcher] 设备: ${device}`);
 
-    // Python 脚本：阻塞读 evdev，检测 keydown(忽略repeat) + keyup
-    // 输出格式: "down:Control" 或 "up:Space"（每行一个事件）
     const script = `
 import struct, os, sys
 WATCH = {29:'Control',97:'Control',57:'Space',125:'Meta',126:'Meta',56:'Alt',100:'Alt'}
@@ -51,7 +63,6 @@ while True:
             elif value == 0:
                 sys.stdout.write('up:' + WATCH[code] + '\\n')
                 sys.stdout.flush()
-            # value==2 是 key repeat，忽略
     except KeyboardInterrupt:
         break
     except:
@@ -61,7 +72,56 @@ while True:
     this._child = spawn('python3', ['-c', script], {
       stdio: ['ignore', 'pipe', 'pipe'],
     });
+    this._bindStdio();
+  }
 
+  // ── Windows: GetAsyncKeyState 轮询 ──
+  _startWindows() {
+    this.log?.info?.('[KeyWatcher] Windows 键盘监听启动 (GetAsyncKeyState 轮询)');
+
+    // PowerShell + C# P/Invoke：每 10ms 轮询 Ctrl/Alt/Space/Meta 状态
+    // 输出格式与 Linux 版本完全一致: "down:Control" / "up:Space"
+    const script = `
+Add-Type @"
+using System;
+using System.Runtime.InteropServices;
+public class KeyState {
+    [DllImport("user32.dll")]
+    public static extern short GetAsyncKeyState(int vKey);
+}
+"@
+
+$watch = @(
+    @{vk=0x11; name='Control'}   # VK_CONTROL
+    @{vk=0x12; name='Alt'}       # VK_MENU
+    @{vk=0x20; name='Space'}     # VK_SPACE
+    @{vk=0x5B; name='Meta'}      # VK_LWIN
+    @{vk=0x5C; name='Meta'}      # VK_RWIN
+)
+$prev = @($false, $false, $false, $false, $false)
+
+while ($true) {
+    for ($i = 0; $i -lt 5; $i++) {
+        $s = [KeyState]::GetAsyncKeyState($watch[$i].vk)
+        $down = ($s -band 0x8000) -ne 0
+        if ($down -ne $prev[$i]) {
+            $prev[$i] = $down
+            $action = if ($down) { 'down' } else { 'up' }
+            Write-Output "$action\`:$($watch[$i].name)"
+        }
+    }
+    Start-Sleep -Milliseconds 10
+}
+`;
+
+    this._child = spawn('powershell', ['-NoProfile', '-NonInteractive', '-Command', script], {
+      stdio: ['ignore', 'pipe', 'pipe'],
+    });
+    this._bindStdio();
+  }
+
+  // ── 共享 stdout 解析（Linux & Windows 输出格式一致）──
+  _bindStdio() {
     let buf = '';
     this._child.stdout.on('data', (chunk) => {
       buf += chunk.toString();
@@ -70,7 +130,7 @@ while True:
       for (const line of lines) {
         const m = line.trim().match(/^(down|up):(.+)$/);
         if (m) {
-          const type = m[1]; // 'down' or 'up'
+          const type = m[1];
           const key = m[2];
           this.log?.info?.(`[KeyWatcher] ${type}: ${key}`);
           this._onKeyEvent?.(type, key);
@@ -97,7 +157,7 @@ while True:
 
   stop() {
     if (this._child) {
-      this._child.kill('SIGTERM');
+      try { this._child.kill('SIGTERM'); } catch (_) {}
       this._child = null;
     }
     this._onKeyEvent = null;

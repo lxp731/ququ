@@ -4,7 +4,15 @@ const os = require('os');
 
 class LogManager {
   constructor() {
-    this.logDir = path.join(os.homedir(), '.config', 'ququ', 'logs');
+    let dataDir;
+    if (process.platform === 'win32') {
+      dataDir = path.join(process.env.APPDATA || path.join(os.homedir(), 'AppData', 'Roaming'), 'ququ');
+    } else if (process.platform === 'darwin') {
+      dataDir = path.join(os.homedir(), 'Library', 'Application Support', 'ququ');
+    } else {
+      dataDir = path.join(os.homedir(), '.config', 'ququ');
+    }
+    this.logDir = path.join(dataDir, 'logs');
     this.logFile = path.join(this.logDir, 'app.log');
     this.funasrLogFile = path.join(this.logDir, 'funasr.log');
     try { fs.mkdirSync(this.logDir, { recursive: true }); } catch (_) {}

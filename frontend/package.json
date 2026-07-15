@@ -82,9 +82,17 @@
       "icon": "assets/icon.png",
       "category": "Office",
       "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "artifactName": "ququ-v${version}.AppImage",
       "maintainer": "yan5xu <lueco.x@gmail.com>",
       "synopsis": "蛐蛐 - 中文语音输入工具",
       "description": "开源免费的 Wispr Flow 替代方案，基于 FunASR 本地语音识别和可配置 AI 模型的语音转文字桌面应用。"
+    },
+    "win": {
+      "icon": "assets/icon.png",
+      "target": [{ "target": "portable", "arch": ["x64"] }]
+    },
+    "portable": {
+      "artifactName": "ququ-v${version}.exe"
     }
   }
 }

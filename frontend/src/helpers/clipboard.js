@@ -52,6 +52,8 @@ class ClipboardManager {
       return this._pasteLinux();
     } else if (process.platform === 'darwin') {
       return this._pasteMacOS();
+    } else if (process.platform === 'win32') {
+      return this._pasteWindows();
     }
     throw new Error('不支持的操作系统');
   }
@@ -113,6 +115,25 @@ class ClipboardManager {
           code === 0 ? resolve({ success: true }) : reject(new Error('粘贴失败，文本已复制到剪贴板，请手动 Cmd+V'));
         });
         proc.on('error', () => { clearTimeout(timer); reject(new Error('粘贴失败，文本已复制到剪贴板，请手动 Cmd+V')); });
+      }, 200);
+    });
+  }
+
+  _pasteWindows() {
+    return new Promise((resolve, reject) => {
+      setTimeout(() => {
+        const proc = spawn('powershell', [
+          '-Command',
+          '$wshell = New-Object -ComObject wscript.shell; $wshell.SendKeys(\'^v\')'
+        ]);
+        let timedOut = false;
+        const timer = setTimeout(() => { timedOut = true; proc.kill(); reject(new Error('粘贴超时，文本已复制到剪贴板，请手动 Ctrl+V')); }, 3000);
+        proc.on('close', (code) => {
+          if (timedOut) return;
+          clearTimeout(timer);
+          code === 0 ? resolve({ success: true }) : reject(new Error('粘贴失败，文本已复制到剪贴板，请手动 Ctrl+V'));
+        });
+        proc.on('error', () => { clearTimeout(timer); reject(new Error('粘贴失败，文本已复制到剪贴板，请手动 Ctrl+V')); });
       }, 200);
     });
   }

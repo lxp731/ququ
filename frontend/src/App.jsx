@@ -343,7 +343,13 @@ export default function App() {
 
   useEffect(() => {
     if (recordingMode !== 'hold') return;
-    window.electronAPI?.startHoldWatch();
+    window.electronAPI?.startHoldWatch().then(r => {
+      if (!r?.success) {
+        toast.warning('当前平台不支持长按模式，已切换回切换模式');
+        setRecordingMode('toggle');
+        window.electronAPI?.setSetting('recording_mode', 'toggle');
+      }
+    });
 
     const isModHeld = () => heldKeys.current.has('Control') || heldKeys.current.has('Meta') || heldKeys.current.has('Alt');
     const isSpaceHeld = () => heldKeys.current.has('Space');
