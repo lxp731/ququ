@@ -17,6 +17,12 @@
 
 ---
 
+## 效果演示
+
+<video src="https://img.liuxp.eu.org/file/BAACAgUAAyEGAATfDMmJAAMGaleowTaZkiOoHeoPGXefTY19DgcAAkUfAAKMysFWWEtIEdCSASw9BA.mp4" controls width="100%"></video>
+
+---
+
 ## 架构
 
 ```
