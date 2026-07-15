@@ -7,7 +7,7 @@
 set -e
 
 echo "[entrypoint] 开始模型检查..." >&2
-python3 /app/download_models.py
+uv run python3 /app/download_models.py
 
 echo "[entrypoint] 启动 FunASR 服务..." >&2
 exec uv run gunicorn --bind 0.0.0.0:8000 \
