@@ -19,7 +19,7 @@
 
 ## 效果演示
 
-<video src="https://img.liuxp.eu.org/file/BAACAgUAAyEGAATfDMmJAAMGaleowTaZkiOoHeoPGXefTY19DgcAAkUfAAKMysFWWEtIEdCSASw9BA.mp4" controls width="100%"></video>
+[![效果演示](https://img.liuxp.eu.org/file/AgACAgUAAyEGAATfDMmJAAMIalevaQUuSJJBqvN-3eAKQj3QTcQAAioQaxuMysFWkFm11Ip_ztwBAAMCAAN3AAM9BA.png)](https://img.liuxp.eu.org/file/BAACAgUAAyEGAATfDMmJAAMGaleowTaZkiOoHeoPGXefTY19DgcAAkUfAAKMysFWWEtIEdCSASw9BA.mp4)
 
 ---
 
