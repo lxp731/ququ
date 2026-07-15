@@ -6,10 +6,13 @@ FunASR 模型下载脚本
 snapshot_download 内置缓存检测，已下载的模型自动跳过
 """
 
+import os
 import sys
 import threading
 
 from modelscope.hub.snapshot_download import snapshot_download
+
+CACHE_DIR = os.environ.get("MODELSCOPE_CACHE")  # Docker 设置 /models，本地 None→使用默认 ~/.cache/modelscope
 
 MODELS = [
     ("damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch", "v2.0.4"),
@@ -21,8 +24,8 @@ MODELS = [
 def download_one(model_id, revision, results, idx):
     """下载单个模型（snapshot_download 内部已缓存则跳过）"""
     try:
-        path = snapshot_download(model_id, revision=revision)
-        results[idx] = (True, path, False)  # success, path, was_cached (unknown here)
+        path = snapshot_download(model_id, revision=revision, cache_dir=CACHE_DIR)
+        results[idx] = (True, path)
     except Exception as e:
         results[idx] = (False, str(e))
 

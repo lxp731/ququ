@@ -1,9 +1,5 @@
 #!/usr/bin/env python3
 # -*- coding: utf-8 -*-
-"""
-FunASR HTTP 服务器
-为容器化部署设计，提供 REST API 供 Electron 前端调用
-"""
 
 import sys
 import json
@@ -57,7 +53,7 @@ def suppress_stdout():
 
 
 # ---------------------------------------------------------------------------
-# FunASR 核心服务（保留所有原有逻辑）
+# FunASR 核心服务
 # ---------------------------------------------------------------------------
 
 class FunASRServer:
@@ -213,6 +209,9 @@ class FunASRServer:
             if not init_result["success"]:
                 return init_result
 
+        if not self.asr_model or not self.vad_model:
+            return {"success": False, "error": "模型未加载"}
+
         try:
             if not os.path.exists(audio_path):
                 return {"success": False, "error": f"音频文件不存在: {audio_path}"}
@@ -359,7 +358,7 @@ app = Flask(__name__)
 CORS(app)
 
 # 全局服务实例（启动时初始化）
-server: FunASRServer = None
+server: "FunASRServer | None" = None
 
 
 @app.route('/health', methods=['GET'])
@@ -453,7 +452,7 @@ def _default_damo_root():
 
 
 def check_model_files(cache_path):
-    """检查模型文件是否存在"""
+    """检查模型文件是否存在（支持版本化子目录如 v2.0.4/）"""
     repos = [
         "speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
         "speech_fsmn_vad_zh-cn-16k-common-pytorch",
@@ -466,12 +465,48 @@ def check_model_files(cache_path):
             missing.append(r)
             continue
         patterns = ["model.pt", "pytorch_model.bin", "*.onnx", "config.json", "model.yaml", "vocab*"]
-        if not any(glob.glob(os.path.join(rd, p)) for p in patterns):
+        found = False
+        for p in patterns:
+            if glob.glob(os.path.join(rd, p)) or glob.glob(os.path.join(rd, '*', p)):
+                found = True
+                break
+        if not found:
             missing.append(r)
     return missing
 
 
 _init_done = False
+
+
+def _download_models():
+    """自动下载缺失模型（并行），返回 True 表示全部成功"""
+    import threading
+    from modelscope.hub.snapshot_download import snapshot_download
+
+    models = [
+        ("damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch", "v2.0.4"),
+        ("damo/speech_fsmn_vad_zh-cn-16k-common-pytorch", "v2.0.4"),
+        ("damo/punc_ct-transformer_zh-cn-common-vocab272727-pytorch", "v2.0.4"),
+    ]
+    cache_dir = os.environ.get("MODELSCOPE_CACHE")
+    results = {}
+
+    def _dl(mid, rev, idx):
+        try:
+            snapshot_download(mid, revision=rev, cache_dir=cache_dir)
+            results[idx] = True
+        except Exception as e:
+            logger.error(f"模型下载失败 {mid}: {e}")
+            results[idx] = False
+
+    logger.info("开始自动下载模型（~1.2GB，首次可能需要几分钟）...")
+    threads = [threading.Thread(target=_dl, args=(mid, rev, i)) for i, (mid, rev) in enumerate(models)]
+    for t in threads:
+        t.start()
+    for t in threads:
+        t.join()
+
+    return all(results.values())
 
 
 def init_server():
@@ -487,15 +522,21 @@ def init_server():
     server = FunASRServer(damo_root=damo_root)
 
     missing = check_model_files(damo_root)
-    if not missing:
-        logger.info("模型文件存在，开始初始化...")
-        init_result = server.initialize()
-        if init_result.get('success'):
-            logger.info(f"模型初始化成功: {init_result.get('message')}")
-        else:
-            logger.warning(f"模型初始化失败: {init_result}")
+    if missing:
+        logger.warning(f"模型文件缺失: {', '.join(missing)}，自动下载中...")
+        if not _download_models():
+            logger.error("模型自动下载失败，跳过初始化。请检查网络后重试。")
+            return
+        # 下载后 damo 子目录可能已创建，重新探测
+        damo_root = _default_damo_root()
+        logger.info(f"下载完成，重新确定模型根目录: {damo_root}")
+
+    logger.info("模型文件就绪，开始初始化...")
+    init_result = server.initialize()
+    if init_result.get('success'):
+        logger.info(f"模型初始化成功: {init_result.get('message')}")
     else:
-        logger.warning(f"模型文件缺失: {', '.join(missing)}，跳过初始化。请先下载模型。")
+        logger.warning(f"模型初始化失败: {init_result}")
 
 
 # gunicorn post_worker_init 钩子
