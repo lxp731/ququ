@@ -12,7 +12,7 @@ permissions:
   contents: write
 
 jobs:
-  build-appimage:
+  build-linux:
     runs-on: ubuntu-latest
 
     steps:
@@ -24,7 +24,7 @@ jobs:
         with:
           node-version: '20'
 
-      - name: Enable pnpm (corepack)
+      - name: Enable pnpm
         run: |
           corepack enable
           corepack prepare pnpm@9 --activate
@@ -54,75 +54,127 @@ jobs:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
 
-      - name: Rename AppImage
+      - name: Set artifact info
         id: artifact
         run: |
-          ARTIFACT=$(ls frontend/dist/*.AppImage 2>/dev/null || echo "")
-          if [ -z "$ARTIFACT" ]; then
-            echo "Error: AppImage not found"
-            ls -la frontend/dist/ || true
-            exit 1
-          fi
           VERSION=$(node -p "require('./frontend/package.json').version")
-          NEW_NAME="QuQu-${VERSION}.AppImage"
-          mv "$ARTIFACT" "frontend/dist/${NEW_NAME}"
-          echo "artifact_name=${NEW_NAME}" >> "$GITHUB_OUTPUT"
+          ARTIFACT="ququ-v${VERSION}.AppImage"
+          echo "artifact_name=${ARTIFACT}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
       - name: Upload AppImage artifact
         uses: actions/upload-artifact@v4
         with:
-          name: QuQu-AppImage
-          path: frontend/dist/QuQu-*.AppImage
+          name: ququ-linux-AppImage
+          path: frontend/dist/ququ-v*.AppImage
           retention-days: 7
 
-      - name: Generate SHA256 checksum
-        run: |
-          cd frontend/dist
-          sha256sum *.AppImage > checksums.txt
+  build-windows:
+    runs-on: windows-latest
 
-      - name: Create / Update GitHub Release
-        if: startsWith(github.ref, 'refs/tags/v')
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Enable pnpm
+        run: |
+          corepack enable
+          corepack prepare pnpm@9 --activate
+
+      - name: Cache pnpm store
+        uses: actions/cache@v4
+        with:
+          path: ~/.local/share/pnpm/store
+          key: ${{ runner.os }}-pnpm-${{ hashFiles('frontend/pnpm-lock.yaml') }}
+          restore-keys: |
+            ${{ runner.os }}-pnpm-
+
+      - name: Install Node.js dependencies
+        run: cd frontend && pnpm install --frozen-lockfile
+
+      - name: Build renderer
+        run: cd frontend && pnpm run build:renderer
+
+      - name: Build Windows portable
+        run: cd frontend && npx electron-builder --win portable --x64 --publish never
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
+
+      - name: Upload Windows artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: ququ-windows-portable
+          path: frontend/dist/ququ-v*.exe
+          retention-days: 7
+
+  release:
+    needs: [build-linux, build-windows]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+
+      - name: Get version
+        id: version
+        run: |
+          VERSION=$(node -p "require('./frontend/package.json').version")
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+
+      - name: Download Linux artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ququ-linux-AppImage
+          path: dist/
+
+      - name: Download Windows artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: ququ-windows-portable
+          path: dist/
+
+      - name: Generate checksums
+        run: |
+          cd dist
+          sha256sum * > checksums.txt
+
+      - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: "QuQu ${{ steps.artifact.outputs.version }}"
+          name: "ququ v${{ steps.version.outputs.version }}"
           body: |
-            ## 蛐蛐 QuQu ${{ steps.artifact.outputs.version }}
+            ## 蛐蛐 QuQu ${{ steps.version.outputs.version }}
 
             ### 下载
-            | 文件 | 说明 |
-            |------|------|
-            | `QuQu-*.AppImage` | Linux AppImage（~120MB，不含 Python） |
+            | 平台 | 文件 | 说明 |
+            |------|------|------|
+            | 🐧 Linux | `ququ-v${{ steps.version.outputs.version }}.AppImage` | AppImage（~120MB）|
+            | 🪟 Windows | `ququ-v${{ steps.version.outputs.version }}.exe` | 免安装便携版 |
 
             ### 使用前准备（容器化后端）
 
-            ```bash
-            # 1. 安装 Podman
-            # Arch: sudo pacman -S podman
-            # Ubuntu: sudo apt install podman
-            # macOS: brew install podman && podman machine init && podman machine start
-
-            # 2. 克隆仓库获取 compose 文件
-            git clone https://github.com/lxp731/ququ.git
-            cd ququ
-
-            # 3. 构建并启动后端容器
-            podman compose up -d
-
-            # 4. 首次运行会自动下载模型（~1.2GB），等待就绪
-            podman compose logs -f
-
-            # 5. 运行 AppImage
-            ./QuQu-${{ steps.artifact.outputs.version }}.AppImage
-            ```
+            首次使用需启动 FunASR 后端容器，详见 [README](https://github.com/lxp731/ququ#readme)。
 
             ### 校验
             详见 `checksums.txt`
 
-            Generated with [Claude Code](https://claude.com/claude-code)
+            🤖 Generated with [Claude Code](https://claude.com/claude-code)
           files: |
-            frontend/dist/QuQu-*.AppImage
-            frontend/dist/checksums.txt
+            dist/ququ-v*.AppImage
+            dist/ququ-v*.exe
+            dist/checksums.txt
           draft: false
           prerelease: false
           generate_release_notes: true
