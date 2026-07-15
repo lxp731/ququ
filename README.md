@@ -6,7 +6,7 @@
 
 <img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg" alt="License">
 <img src="https://img.shields.io/badge/platform-macOS%20%7C%20Linux-lightgrey" alt="Platform">
-<img src="https://img.shields.io/badge/release-v1.1.1-brightgreen" alt="Release">
+<img src="https://img.shields.io/badge/release-v1.1.2-brightgreen" alt="Release">
 <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome">
 
 </div>
@@ -37,13 +37,61 @@
 
 ## 快速开始
 
-### 前置条件
+### 方式一：测试/开发环境（源码运行）
 
-- **Node.js 18+** 和 **pnpm**
-- **Podman** 或 **Docker**（用于运行 FunASR 后端容器）
-- **Linux**（当前主要支持平台；macOS/Windows 后续适配）
+适合开发调试、快速体验。前后端均从源码启动，模型首次自动下载。
 
-### 1. 安装 Podman
+#### 前置条件
+
+- **Python 3.11+** 和 **uv**（Python 依赖管理）
+- **Node.js 18+** 和 **pnpm**（前端依赖管理）
+- **Linux**（当前主要支持平台；macOS 后续适配）
+
+#### 1. 克隆项目
+
+```bash
+git clone https://github.com/lxp731/ququ.git
+cd ququ
+```
+
+#### 2. 启动后端（源码）
+
+```bash
+cd backend
+
+# 安装 Python 依赖（首次）
+uv sync
+
+# 启动 FunASR 服务（首次运行自动下载模型 ~1.2GB，需 1-2 分钟）
+uv run python funasr_server.py --port 8000
+```
+
+后端启动后访问 `http://127.0.0.1:8000/health` 验证，返回 `{"status":"ok"}` 即就绪。
+
+#### 3. 启动前端（开发模式）
+
+```bash
+cd frontend
+pnpm install
+pnpm run dev
+```
+
+#### 4. 配置 AI 模型（可选）
+
+启动应用后，在**设置页面**中填入 AI 服务商的 **API Key**、**Base URL** 和**模型名称**。支持通义千问、Kimi、智谱AI 等国产模型。
+
+---
+
+### 方式二：生产环境（容器 + AppImage）
+
+适合日常稳定使用。后端容器化运行，前端使用打包好的 AppImage。
+
+#### 前置条件
+
+- **Podman** 或 **Docker**（运行后端容器）
+- **Linux**（当前主要支持平台）
+
+#### 1. 安装 Podman
 
 ```bash
 # Arch / CachyOS
@@ -56,45 +104,45 @@ sudo apt install podman
 brew install podman && podman machine init && podman machine start
 ```
 
-### 2. 克隆项目并启动后端
+#### 2. 启动后端容器
 
 ```bash
 git clone https://github.com/lxp731/ququ.git
 cd ququ
 
-# 构建并启动 FunASR 容器
-podman compose up -d
+# 构建镜像并启动容器
+podman compose up -d --build
 
-# 查看日志，等待模型加载完成（首次约 1-2 分钟）
+# 查看日志，等待模型加载完成（首次约 1-2 分钟，需下载 ~1.2GB 模型）
 podman logs -f ququ-backend
 ```
 
-### 3. 运行前端
+> 模型文件缓存于 `~/.cache/modelscope`，销毁重建容器无需重新下载。
 
-#### 开发模式
+#### 3. 安装前端 AppImage
+
+**Arch 系用户：**
 
 ```bash
-cd frontend
-pnpm install
-pnpm run dev
+yay -S ququ-bin
 ```
 
-#### 生产模式（AppImage）
-1. Arch 系用户
-    ```bash
-    yay -S ququ-bin
-    ```
-2. 其他用户
-从 [Releases](https://github.com/lxp731/ququ/releases) 下载最新 AppImage，确保容器已启动后直接运行：
+**其他 Linux 发行版：**
 
-    ```bash
-    chmod +x QuQu-1.0.0.AppImage
-    ./QuQu-1.0.0.AppImage
-    ```
+从 [Releases](https://github.com/lxp731/ququ/releases) 下载最新 `.AppImage` 文件：
 
-### 4. 配置 AI 模型（可选）
+```bash
+chmod +x QuQu-*.AppImage
+./QuQu-*.AppImage
+```
+
+#### 4. 配置 AI 模型（可选）
 
 启动应用后，在**设置页面**中填入 AI 服务商的 **API Key**、**Base URL** 和**模型名称**。支持通义千问、Kimi、智谱AI 等国产模型。
+
+> **提示**：
+>1. 如果后端部署在其他主机，可在设置页面中修改 FunASR 后端地址，指向远程服务。
+>2. 后端默认允许来自所有 IP 的访问，即 0.0.0.0:8000，安全生产环境自行限制。
 
 ---
 
