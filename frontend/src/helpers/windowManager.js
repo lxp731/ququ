@@ -85,7 +85,7 @@ class WindowManager {
     if (IS_DEV) {
       this.historyWindow.loadURL('http://localhost:5173/history.html');
     } else {
-      this.historyWindow.loadFile(path.join(__dirname, '..', '..', 'dist', 'src', 'history.html'));
+      this.historyWindow.loadFile(path.join(__dirname, '..', '..', 'dist', 'history.html'));
     }
     this.historyWindow.on('closed', () => { this.historyWindow = null; });
     return this.historyWindow;
@@ -101,7 +101,7 @@ class WindowManager {
     if (IS_DEV) {
       this.settingsWindow.loadURL('http://localhost:5173?page=settings');
     } else {
-      this.settingsWindow.loadFile(path.join(__dirname, '..', '..', 'dist', 'src', 'settings.html'));
+      this.settingsWindow.loadFile(path.join(__dirname, '..', '..', 'dist', 'settings.html'));
     }
     this.settingsWindow.on('closed', () => { this.settingsWindow = null; });
     return this.settingsWindow;
