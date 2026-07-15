@@ -6,7 +6,7 @@
 pnpm install               # 安装依赖
 pnpm run dev               # 启动 Electron + Vite 开发模式
 pnpm run build:renderer    # 构建前端（Vite production build）
-pnpm run build:linux       # 打包 Linux AppImage
+pnpm run build             # 打包当前平台（Windows → portable exe / Linux → AppImage / macOS → dmg）
 ```
 
 ## 规约
@@ -120,3 +120,28 @@ app 启动
 - **文字**: `text-white` 主文本，`text-slate-400` 次要文本
 - **状态指示**: `bg-green-500` 就绪，`bg-yellow-500` 处理中，`bg-red-500` 错误
 - **Toast**: 使用 `sonner` 库 `toast.success()` / `toast.error()`，不在组件内额外渲染结果
+
+## 跨平台实现细节
+
+### KeyWatcher — 长按录制模式
+
+| 平台 | 实现方式 | 底层 API |
+|------|---------|----------|
+| Linux | Python 子进程读 `/dev/input/event*` | evdev 原始键盘事件 |
+| Windows | PowerShell + C# P/Invoke 子进程 | `user32.dll` `GetAsyncKeyState` 10ms 轮询 |
+| macOS | 不支持 | 前端自动回退到 toggle 模式 |
+
+输出格式统一为 `down:KeyName` / `up:KeyName`（每行一个事件），监控键：`Control`、`Alt`、`Space`、`Meta`。
+
+### Clipboard — 剪贴板粘贴
+
+- **Linux**: ydotool → wtype → xdotool 逐级尝试模拟 `Ctrl+V`
+- **macOS**: `osascript` 模拟 `Cmd+V`
+- **Windows**: PowerShell `SendKeys('^v')` 通过 `wscript.shell` COM 对象
+
+### LogManager — 日志路径
+
+按平台使用正确的数据目录（与 `EnvironmentManager` 一致）：
+- Windows: `%APPDATA%/ququ/logs/`
+- macOS: `~/Library/Application Support/ququ/logs/`
+- Linux: `~/.config/ququ/logs/`

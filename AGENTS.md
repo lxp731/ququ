@@ -41,7 +41,9 @@ ququ/
 
 ## 关键设计决策
 
+- **跨平台支持**：Windows / macOS / Linux 三平台。Windows 打包为免安装 portable exe
 - **前后端分离**：Electron 桌面端 ↔ Flask HTTP 服务。后端绑定 `0.0.0.0:8000`（接受所有 IP），前端默认连接 `127.0.0.1:8000`，可在设置中改为远程地址
 - **后端双启动模式**：源码 `uv run python funasr_server.py` / 容器 `podman compose up -d`
 - **模型自动下载**：首次启动自动从 ModelScope 下载 ~1.2GB，`snapshot_download` 幂等，已缓存则跳过
 - **设置持久化**：`better-sqlite3` 存于用户数据目录，key-value 模式，存时 `JSON.stringify`，取时 `JSON.parse`
+- **长按录音**：KeyWatcher 跨平台实现 — Linux 用 evdev (Python)，Windows 用 GetAsyncKeyState (PowerShell + C# P/Invoke)，macOS 暂不支持（前端自动回退到切换模式）
