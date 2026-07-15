@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { motion } from 'framer-motion';
 import { toast, Toaster } from 'sonner';
-import { Settings, Save, Eye, EyeOff, Loader2, TestTube, CheckCircle, XCircle, Mic, Shield, Zap, Cpu, ChevronDown } from 'lucide-react';
+import { Settings, Save, Eye, EyeOff, Loader2, TestTube, Mic, Shield, Zap, Cpu, ChevronDown, Server } from 'lucide-react';
 import './index.css';
 import { usePermissions } from './hooks/usePermissions';
 
@@ -70,12 +70,13 @@ const SettingsPage = () => {
   const [settings, setSettings] = useState({
     ai_api_key: '', ai_base_url: 'https://api.openai.com/v1',
     ai_model: 'gpt-3.5-turbo', enable_ai_optimization: true,
+    funasr_base_url: '',
   });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [showApiKey, setShowApiKey] = useState(false);
   const [testing, setTesting] = useState(false);
-  const [testResult, setTestResult] = useState(null);
+  const [testingBackend, setTestingBackend] = useState(false);
   const [availableModels, setAvailableModels] = useState([]);
   const [fetchingModels, setFetchingModels] = useState(false);
   const [customModel, setCustomModel] = useState(false);
@@ -131,6 +132,7 @@ const SettingsPage = () => {
           ai_base_url: all.ai_base_url || 'https://api.openai.com/v1',
           ai_model: all.ai_model || 'gpt-3.5-turbo',
           enable_ai_optimization: all.enable_ai_optimization !== false,
+          funasr_base_url: all.funasr_base_url || '',
         });
         const preset = ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini', 'qwen3-30b-a3b-instruct-2507'];
         setCustomModel(!preset.includes(all.ai_model) && !all.ai_model);
@@ -139,14 +141,24 @@ const SettingsPage = () => {
     finally { setLoading(false); }
   };
 
-  const saveSettings = async () => {
+  const saveBackendSetting = async () => {
+    try {
+      const url = settings.funasr_base_url.trim();
+      if (window.electronAPI) {
+        await window.electronAPI.saveSetting('funasr_base_url', url);
+      }
+      toast.success('后端地址已保存');
+    } catch (e) { toast.error('保存失败'); }
+  };
+
+  const saveAISettings = async () => {
     try {
       setSaving(true);
       if (window.electronAPI) {
-        for (const [k, v] of Object.entries(settings)) {
-          await window.electronAPI.setSetting(k, v);
+        for (const k of ['ai_api_key', 'ai_base_url', 'ai_model', 'enable_ai_optimization']) {
+          await window.electronAPI.setSetting(k, settings[k]);
         }
-        toast.success('设置保存成功');
+        toast.success('AI 设置保存成功');
       }
     } catch (e) { toast.error('保存失败'); }
     finally { setSaving(false); }
@@ -154,17 +166,32 @@ const SettingsPage = () => {
 
   const testConfig = async () => {
     if (!settings.ai_api_key.trim()) { toast.error('请先输入 API Key'); return; }
-    setTesting(true); setTestResult(null);
+    setTesting(true);
     try {
       const r = await window.electronAPI.checkAIStatus({
         ai_api_key: settings.ai_api_key.trim(),
         ai_base_url: settings.ai_base_url.trim() || 'https://api.openai.com/v1',
         ai_model: settings.ai_model.trim() || 'gpt-3.5-turbo',
       });
-      setTestResult(r);
       toast[r.available ? 'success' : 'error'](r.available ? '配置测试通过' : '配置测试失败', { description: r.available ? `模型: ${r.model}` : r.error });
-    } catch (e) { setTestResult({ available: false, error: e.message }); }
+    } catch (e) { toast.error('测试失败', { description: e.message }); }
     finally { setTesting(false); }
+  };
+
+  const testBackendConnection = async () => {
+    const url = settings.funasr_base_url.trim() || 'http://127.0.0.1:8000';
+    setTestingBackend(true);
+    try {
+      const res = await fetch(`${url.replace(/\/+$/, '')}/health`, { signal: AbortSignal.timeout(5000) });
+      if (res.ok) {
+        toast.success('后端连接成功', { description: url });
+      } else {
+        toast.error(`HTTP ${res.status}`, { description: url });
+      }
+    } catch (e) {
+      toast.error('后端连接失败', { description: e.message });
+    }
+    finally { setTestingBackend(false); }
   };
 
   if (loading) {
@@ -218,8 +245,31 @@ const SettingsPage = () => {
             </div>
           </motion.div>
 
-          {/* AI Config */}
+          {/* FunASR 后端 */}
           <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.1 }} className="glass-light p-5">
+            <h2 className="text-sm font-semibold text-white/80 mb-4 flex items-center gap-2">
+              <Server className="w-4 h-4 text-emerald-400" /> FunASR 后端
+            </h2>
+            <p className="text-[10px] text-white/30 mb-4">设置语音识别后端服务地址。留空则使用本地默认地址。</p>
+            <Input label="后端地址" type="url" value={settings.funasr_base_url}
+              onChange={e => setSettings(p => ({ ...p, funasr_base_url: e.target.value }))}
+              placeholder="http://127.0.0.1:8000" hint="FunASR 服务所在的主机地址，支持局域网或远程部署" />
+            <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/[0.06]">
+              <button onClick={testBackendConnection} disabled={testingBackend}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
+                {testingBackend ? <Loader2 className="w-3 h-3 animate-spin" /> : <TestTube className="w-3 h-3" />}
+                测试连接
+              </button>
+              <button onClick={saveBackendSetting}
+                className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition-colors">
+                <Save className="w-3 h-3" />
+                保存并连接
+              </button>
+            </div>
+          </motion.div>
+
+          {/* AI Config */}
+          <motion.div initial={{ opacity: 0, y: 10 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: 0.15 }} className="glass-light p-5">
             <h2 className="text-sm font-semibold text-white/80 mb-4 flex items-center gap-2">
               <Zap className="w-4 h-4 text-amber-400" /> AI 配置
             </h2>
@@ -297,34 +347,17 @@ const SettingsPage = () => {
                 </div>
               </div>
 
-              {/* Test Result */}
-              {testResult && (
-                <motion.div initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }}
-                  className={`p-3 rounded-lg border ${testResult.available ? 'bg-emerald-500/5 border-emerald-500/20' : 'bg-red-500/5 border-red-500/20'}`}>
-                  <div className="flex items-center gap-2">
-                    {testResult.available ? <CheckCircle className="w-4 h-4 text-emerald-400" /> : <XCircle className="w-4 h-4 text-red-400" />}
-                    <span className={`text-sm font-medium ${testResult.available ? 'text-emerald-300' : 'text-red-300'}`}>
-                      {testResult.available ? '连接成功' : '连接失败'}
-                    </span>
-                  </div>
-                  {testResult.available && testResult.model && (
-                    <p className="mt-1 text-xs text-white/40">模型: {testResult.model} | Token: {testResult.usage?.total_tokens || 'N/A'}</p>
-                  )}
-                  {!testResult.available && <p className="mt-1 text-xs text-red-300/70">{testResult.error}</p>}
-                </motion.div>
-              )}
-
-              {/* Actions */}
-              <div className="flex items-center justify-between pt-4 border-t border-white/[0.06]">
+              {/* AI Actions */}
+              <div className="flex items-center justify-end gap-3 pt-4 border-t border-white/[0.06]">
                 <button onClick={testConfig} disabled={testing}
                   className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg bg-emerald-500/10 text-emerald-300 hover:bg-emerald-500/20 transition-colors disabled:opacity-50">
                   {testing ? <Loader2 className="w-3 h-3 animate-spin" /> : <TestTube className="w-3 h-3" />}
-                  测试配置
+                  测试 AI 配置
                 </button>
-                <button onClick={saveSettings} disabled={saving || !settings.ai_api_key}
-                  className="flex items-center gap-2 px-4 py-1.5 text-xs rounded-lg bg-indigo-500 text-white hover:bg-indigo-600 transition-colors disabled:opacity-50">
+                <button onClick={saveAISettings} disabled={saving || !settings.ai_api_key}
+                  className="flex items-center gap-2 px-3 py-1.5 text-xs rounded-lg bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition-colors disabled:opacity-50">
                   {saving ? <Loader2 className="w-3 h-3 animate-spin" /> : <Save className="w-3 h-3" />}
-                  保存设置
+                  保存 AI 设置
                 </button>
               </div>
             </div>
@@ -348,6 +381,7 @@ const SettingsPage = () => {
 };
 
 export { SettingsPage };
+export default SettingsPage;
 
 // Standalone render
 if (document.getElementById('settings-root')) {

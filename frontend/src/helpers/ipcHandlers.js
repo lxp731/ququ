@@ -40,13 +40,14 @@ class IPCHandlers {
     // ── FunASR ──
     ipcMain.handle('check-funasr-status', async () => {
       const s = await this.funasr.checkStatus();
-      return { ...s, models_initialized: this.funasr.modelsInitialized, server_ready: this.funasr.serverReady, is_initializing: !!this.funasr.initializationPromise };
+      return { ...s, models_initialized: this.funasr.modelsInitialized, server_ready: this.funasr.serverReady, is_initializing: !!this.funasr.initializationPromise, connecting: s.connecting };
     });
     ipcMain.handle('transcribe-audio', async (_, audioData, options) => this.funasr.transcribeAudio(audioData, options));
     ipcMain.handle('check-model-files', () => this.funasr.checkModelFiles());
     ipcMain.handle('get-download-progress', () => this.funasr.getDownloadProgress());
     ipcMain.handle('restart-funasr-server', () => this.funasr.restartServer());
     ipcMain.handle('download-model', async (event) => this.funasr.restartServer());
+    ipcMain.handle('start-local-backend', async () => this.funasr.startLocalBackend());
 
     // ── AI 文本处理 ──
     ipcMain.handle('process-text', async (_, text, mode = 'optimize') => this._processWithAI(text, mode));
@@ -69,8 +70,14 @@ class IPCHandlers {
 
     // ── 设置 ──
     ipcMain.handle('get-setting', (_, key, def) => this.db.getSetting(key, def));
-    ipcMain.handle('set-setting', (_, key, value) => this.db.setSetting(key, value));
-    ipcMain.handle('save-setting', (_, key, value) => this.db.setSetting(key, value));
+    ipcMain.handle('set-setting', (_, key, value) => {
+      this.db.setSetting(key, value);
+      if (key === 'funasr_base_url') this.funasr?.setBaseUrl?.(value);
+    });
+    ipcMain.handle('save-setting', (_, key, value) => {
+      this.db.setSetting(key, value);
+      if (key === 'funasr_base_url' && value) this.funasr?.connect?.(value);
+    });
     ipcMain.handle('get-all-settings', () => this.db.getAllSettings());
     ipcMain.handle('get-settings', () => this.db.getAllSettings());
     ipcMain.handle('reset-settings', () => this.db.resetSettings());

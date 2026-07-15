@@ -79,8 +79,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   log: (level, msg) => ipcRenderer.invoke('log', level, msg),
   getDebugInfo: () => ipcRenderer.invoke('get-debug-info'),
 
-  // 模型
+  // 模型 & 后端
   downloadModel: (name) => ipcRenderer.invoke('download-model', name),
+  startLocalBackend: () => ipcRenderer.invoke('start-local-backend'),
   getAvailableModels: () => ipcRenderer.invoke('get-available-models'),
   getCurrentModel: () => ipcRenderer.invoke('get-current-model'),
   switchModel: (name) => ipcRenderer.invoke('switch-model', name),

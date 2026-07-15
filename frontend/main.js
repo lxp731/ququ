@@ -47,6 +47,10 @@ const keyWatcher = new KeyWatcher(logger);
 // 初始化数据库
 db.initialize(env.ensureDataDirectory());
 
+// 从数据库读取 FunASR 后端地址（用户可能在设置中修改过）
+const savedBaseUrl = db.getSetting('funasr_base_url');
+if (savedBaseUrl) funasr.setBaseUrl(savedBaseUrl);
+
 // 初始化 IPC
 new IPCHandlers({ databaseManager: db, clipboardManager: clip, funasrManager: funasr, windowManager: wm, hotkeyManager: hotkey, keyWatcher, logger });
 
@@ -64,8 +68,8 @@ async function startApp() {
   // macOS dock
   if (process.platform === 'darwin' && app.dock) app.dock.show();
 
-  // 异步启动 FunASR 容器
-  funasr.initializeAtStartup().catch(e => logger.warn('FunASR 容器暂不可用:', e.message));
+  // 异步连接 FunASR 后端（非阻塞，失败不影��启动）
+  funasr.initializeAtStartup().catch(e => logger.warn('FunASR 后端暂不可用:', e.message));
 
   // 创建窗口
   try { await wm.createMainWindow(); logger.info('主窗口创建成功'); } catch (e) { logger.error('主窗口创建失败:', e); }

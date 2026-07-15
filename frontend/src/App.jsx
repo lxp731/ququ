@@ -300,7 +300,7 @@ export default function App() {
   // Toggle recording
   const toggleRecording = useCallback(() => {
     if (!modelStatus.isReady) {
-      const msgs = { need_download: '请先下载 AI 模型', downloading: '模型下载中...', loading: '模型加载中...', error: `模型错误: ${modelStatus.error}` };
+      const msgs = { need_backend: '请先启动后端服务', connecting: '正在连接后端...', need_download: '请先下载 AI 模型', downloading: '模型下载中...', loading: '模型加载中...', error: `模型错误: ${modelStatus.error}` };
       toast.warning(msgs[modelStatus.stage] || '模型未就绪');
       return;
     }
@@ -442,11 +442,13 @@ export default function App() {
             className="mt-4 text-sm text-white/40 text-center"
           >
             {modelStatus.noApi && 'Electron API 不可用'}
-            {!modelStatus.noApi && modelStatus.stage === 'checking' && '正在检查模型状态...'}
+            {!modelStatus.noApi && modelStatus.stage === 'need_backend' && '后端服务未连接'}
+            {modelStatus.stage === 'connecting' && '正在连接后端服务...'}
+            {modelStatus.stage === 'checking' && '正在检查模型状态...'}
             {modelStatus.stage === 'need_download' && '需要下载 AI 模型文件'}
             {modelStatus.stage === 'downloading' && `模型下载中 ${modelStatus.downloadProgress || 0}%`}
             {modelStatus.stage === 'loading' && 'FunASR 模型加载中...'}
-            {modelStatus.stage === 'error' && `模型错误: ${modelStatus.error || '未知'}`}
+            {modelStatus.stage === 'error' && `模型错误: ${String(modelStatus.error || '未知')}`}
             {modelStatus.stage === 'ready' && micState === 'recording' && '正在录音，再次点击停止'}
             {modelStatus.stage === 'ready' && micState === 'processing' && '正在识别语音...'}
             {modelStatus.stage === 'ready' && micState === 'optimizing' && 'AI 正在优化文本...'}
@@ -536,6 +538,49 @@ export default function App() {
           )}
         </AnimatePresence>
 
+        {/* ── Backend Status Banner ── */}
+        <AnimatePresence>
+          {(modelStatus.stage === 'need_backend' || modelStatus.stage === 'connecting') && (
+            <motion.div
+              initial={{ opacity: 0, height: 0 }} animate={{ opacity: 1, height: 'auto' }} exit={{ opacity: 0, height: 0 }}
+              className="mb-4 overflow-hidden"
+            >
+              <div className="glass-light p-4">
+                <div className="flex items-center justify-between mb-2">
+                  <span className="text-xs text-white/60">
+                    {modelStatus.stage === 'need_backend' && '后端服务未连接'}
+                    {modelStatus.stage === 'connecting' && '正在连接后端服务...'}
+                  </span>
+                  {modelStatus.stage === 'need_backend' && (
+                    <div className="flex gap-2">
+                      <button onClick={async () => {
+                        toast.info('正在启动本地后端...');
+                        const r = await modelStatus.startLocalBackend();
+                        if (r?.success) toast.success('后端启动成功');
+                      }} className="text-xs px-3 py-1 bg-emerald-500/20 text-emerald-300 rounded-lg hover:bg-emerald-500/30 transition-colors">
+                        启动本地
+                      </button>
+                      <button onClick={() => window.electronAPI?.openSettingsWindow()}
+                        className="text-xs px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-lg hover:bg-indigo-500/30 transition-colors">
+                        手动设置
+                      </button>
+                    </div>
+                  )}
+                </div>
+                {modelStatus.stage === 'connecting' && (
+                  <div className="h-1 bg-white/5 rounded-full overflow-hidden">
+                    <motion.div
+                      className="h-full bg-gradient-to-r from-emerald-500 to-indigo-500 rounded-full"
+                      animate={{ width: '90%' }}
+                      transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                    />
+                  </div>
+                )}
+              </div>
+            </motion.div>
+          )}
+        </AnimatePresence>
+
         {/* ── Text Display ── */}
         <div className="flex-1 overflow-y-auto min-h-0">
           <TextPanel
@@ -556,6 +601,8 @@ export default function App() {
             modelStatus.stage === 'ready' ? 'bg-emerald-400' :
             modelStatus.stage === 'checking' ? 'bg-amber-400 animate-pulse' :
             modelStatus.stage === 'loading' ? 'bg-blue-400 animate-pulse' :
+            modelStatus.stage === 'connecting' ? 'bg-emerald-400 animate-pulse' :
+            modelStatus.stage === 'need_backend' ? 'bg-amber-400' :
             modelStatus.stage === 'error' ? 'bg-red-400' :
             'bg-white/20'
           }`} />
