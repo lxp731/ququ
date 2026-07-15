@@ -120,6 +120,7 @@ __pycache__/
 .Python
 env/
 venv/
+.venv/
 ENV/
 env.bak/
 venv.bak/
@@ -155,3 +156,4 @@ temp/
 # Docker
 docker-compose.override.yml
 
+.vs/
