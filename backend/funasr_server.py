@@ -155,6 +155,10 @@ class FunASRServer:
             logger.info("正在并行初始化FunASR模型...")
             start_time = time.time()
 
+            # 保存原始 stdout — suppress_stdout 在多线程中会互相覆盖，
+            # 导致 sys.stdout 被残留为已关闭的 /dev/null 文件描述符
+            _original_stdout = sys.stdout
+
             results = {}
 
             def load_model_thread(model_name, load_func):
@@ -177,6 +181,9 @@ class FunASRServer:
                 if thread.is_alive():
                     logger.error("模型加载线程超时")
                     return {"success": False, "error": "模型加载超时", "type": "timeout_error"}
+
+            # 恢复原始 stdout，防止被 suppress_stdout 的竞态条件破坏
+            sys.stdout = _original_stdout
 
             failed_models = [name for name, success in results.items() if not success]
             if failed_models:

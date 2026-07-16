@@ -219,7 +219,7 @@ class FunASRManager {
     else throw new Error(`不支持的音频数据类型: ${typeof audioData}`);
 
     const formData = new FormData();
-    formData.append('audio', new Blob([buf], { type: 'audio/wav' }), 'audio.wav');
+    formData.append('audio', new File([buf], 'audio.wav', { type: 'audio/wav' }), 'audio.wav');
     formData.append('options', JSON.stringify(options));
     const result = await this._httpRequest('/transcribe', { method: 'POST', formData, timeout: 120000 });
     if (!result.success) throw new Error(result.error || '转录失败');
