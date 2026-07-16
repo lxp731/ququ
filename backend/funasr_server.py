@@ -80,6 +80,12 @@ class FunASRServer:
 
     def _signal_handler(self, signum, frame):
         logger.info(f"收到信号 {signum}，准备退出...")
+        if os.name == 'nt':
+            # Windows: 信号机制不完善，直接强制退出
+            os._exit(0)
+        else:
+            # Linux/macOS: sys.exit() 触发正常的清理流程（__exit__, atexit, finally）
+            sys.exit(0)
 
     def _load_asr_model(self):
         try:
