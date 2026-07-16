@@ -5,7 +5,7 @@
 **开源免费的 Wispr Flow 替代方案 | 为中文而生的下一代智能语音工作流**
 
 <img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg" alt="License">
-<img src="https://img.shields.io/badge/platform-Windows%20%7C%20macOS%20%7C%20Linux-lightgrey" alt="Platform">
+<img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey" alt="Platform">
 <img src="https://img.shields.io/badge/release-v1.1.2-brightgreen" alt="Release">
 <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome">
 
@@ -51,7 +51,7 @@
 
 - **Python 3.11+** 和 **uv**（Python 依赖管理）
 - **Node.js 18+** 和 **pnpm**（前端依赖管理）
-- **Linux / macOS / Windows**（均支持开发与打包运行）
+- **Linux / Windows**（均支持开发与打包运行，macOS 暂未适配）
 
 #### 1. 克隆项目
 
@@ -104,9 +104,6 @@ sudo pacman -S podman
 
 # Ubuntu / Debian
 sudo apt install podman
-
-# macOS
-brew install podman && podman machine init && podman machine start
 ```
 
 #### 2. 启动后端容器
@@ -129,10 +126,6 @@ podman logs -f ququ-backend
 **Windows：**
 
 从 [Releases](https://github.com/lxp731/ququ/releases) 下载最新 `ququ-v*-portable.exe`，免安装，双击即用。
-
-**macOS：**
-
-从 [Releases](https://github.com/lxp731/ququ/releases) 下载最新 `.dmg` 文件，拖入 Applications 文件夹。
 
 **Arch 系 Linux：**
 
@@ -185,11 +178,10 @@ ququ/
 # 前端开发（frontend/ 目录下）
 pnpm run dev               # 启动 Electron + Vite 开发模式
 pnpm run build:renderer    # 构建前端
-pnpm run build             # 打包当前平台安装包（Windows: portable exe / Linux: AppImage / macOS: dmg）
+pnpm run build             # 打包当前平台安装包（Windows: portable exe / Linux: AppImage）
 
 # 单独打包指定平台（跨平台构建）
 pnpm run build:linux       # 打包 Linux AppImage
-pnpm run build:mac         # 打包 macOS dmg
 # Windows 便携版需在 Windows 上直接运行 pnpm run build
 
 # 后端容器（项目根目录）
