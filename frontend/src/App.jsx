@@ -235,6 +235,7 @@ export default function App() {
   const [isHovered, setIsHovered] = useState(false);
   const [recordingMode, setRecordingMode] = useState('toggle');
   const [isCapturingHotkey, setIsCapturingHotkey] = useState(false);
+  const [appVersion, setAppVersion] = useState('');
 
   const modelStatus = useModelStatus();
   const { isRecording, isProcessing: isRecProcessing, startRecording, stopRecording } = useRecording(modelStatus);
@@ -245,6 +246,7 @@ export default function App() {
   // Load saved recording mode
   useEffect(() => {
     window.electronAPI?.getSetting('recording_mode', 'toggle').then(setRecordingMode);
+    window.electronAPI?.getAppVersion().then(v => setAppVersion(v || ''));
   }, []);
 
   // Safe paste with dedup
@@ -600,7 +602,7 @@ export default function App() {
 
         {/* ── Footer Branding ── */}
         <div className="text-center py-3 flex items-center justify-center gap-3">
-          <span className="text-[10px] text-white/15 tracking-widest">QUQU</span>
+          <span className="text-[12px] text-white/50 tracking-widest">QUQU v{appVersion}</span>
           {/* Live status dot to confirm React is interactive */}
           <span className={`inline-block w-1.5 h-1.5 rounded-full ${
             modelStatus.noApi ? 'bg-red-400' :
@@ -612,7 +614,7 @@ export default function App() {
             modelStatus.stage === 'error' ? 'bg-red-400' :
             'bg-white/20'
           }`} />
-          <span className="text-[10px] text-white/20">{modelStatus.stage}</span>
+          <span className="text-[13px] text-white/50">{modelStatus.stage}</span>
         </div>
       </div>
     </div>
