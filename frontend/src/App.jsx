@@ -243,6 +243,7 @@ export default function App() {
   const [isHovered, setIsHovered] = useState(false);
   const [recordingMode, setRecordingMode] = useState('toggle');
   const [isCapturingHotkey, setIsCapturingHotkey] = useState(false);
+  const [reconnecting, setReconnecting] = useState(false);
   const [appVersion, setAppVersion] = useState('');
   const [isPackaged, setIsPackaged] = useState(false);
 
@@ -580,6 +581,14 @@ export default function App() {
                           启动本地
                         </button>
                       )}
+                      <button onClick={async () => {
+                        setReconnecting(true);
+                        await modelStatus.checkStatus();
+                        setReconnecting(false);
+                      }} disabled={reconnecting}
+                        className="text-xs px-3 py-1 bg-white/5 text-white/60 hover:bg-white/10 transition-colors disabled:opacity-50">
+                        {reconnecting ? '检测中...' : '重新连接'}
+                      </button>
                       <button onClick={() => window.electronAPI?.openSettingsWindow()}
                         className="text-xs px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-lg hover:bg-indigo-500/30 transition-colors">
                         手动设置

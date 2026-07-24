@@ -70,13 +70,6 @@ export const useModelStatus = () => {
     checkStatus();
   }, [checkStatus]);
 
-  // Poll until ready
-  useEffect(() => {
-    if (isOtherPage() || status.isReady || status.stage === 'downloading' || status.noApi) return;
-    const id = setInterval(checkStatus, 5000);
-    return () => clearInterval(id);
-  }, [status.isReady, status.stage, status.noApi, checkStatus]);
-
   const startLocalBackend = useCallback(async () => {
     if (!window.electronAPI) return;
     setStatus(prev => ({ ...prev, stage: 'connecting', connecting: true }));
