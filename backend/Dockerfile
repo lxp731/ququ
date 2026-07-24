@@ -1,4 +1,5 @@
-FROM python:3.14-slim
+# ── 构建阶段：安装依赖（需要编译工具） ──
+FROM python:3.14-slim AS builder
 
 WORKDIR /app
 
@@ -20,7 +21,7 @@ RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/
     sed -i 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' \
     /etc/apt/sources.list
 
-# 系统依赖
+# 系统依赖（编译阶段需要 gcc g++）
 RUN apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 curl gcc g++ \
     && rm -rf /var/lib/apt/lists/*
@@ -35,7 +36,30 @@ ENV UV_LINK_MODE=copy
 COPY pyproject.toml .
 RUN uv sync --no-dev --no-editable
 
-# 应用代码 + 入口脚本
+# ── 运行阶段：仅保留运行时文件 ──
+FROM python:3.14-slim
+
+WORKDIR /app
+
+# 清除主机代理设置
+ENV http_proxy=""
+ENV https_proxy=""
+ENV HTTP_PROXY=""
+ENV HTTPS_PROXY=""
+ENV no_proxy=""
+ENV NO_PROXY=""
+
+# 切换为清华 APT 源，只装运行时必需的 libsndfile1 和 curl (healthcheck)
+RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' \
+    /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
+    sed -i 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' \
+    /etc/apt/sources.list \
+    && apt-get update && apt-get install -y --no-install-recommends \
+    libsndfile1 curl \
+    && rm -rf /var/lib/apt/lists/*
+
+# 从构建阶段复制 .venv 和应用代码
+COPY --from=builder /app/.venv /app/.venv
 COPY funasr_server.py download_models.py entrypoint.sh ./
 
 # 运行环境
@@ -44,6 +68,9 @@ ENV PYTHONUNBUFFERED=1
 ENV MODELSCOPE_CACHE=/models
 ENV OMP_NUM_THREADS=4
 ENV DAMO_ROOT=/models/hub/damo
+ENV QUQU_TMP_DIR=/tmp
+ENV FUNASR_HOST=0.0.0.0
+ENV FUNASR_PORT=8000
 
 EXPOSE 8000
 
