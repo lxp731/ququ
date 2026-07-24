@@ -73,7 +73,7 @@
     "appId": "com.ququ.app",
     "productName": "蛐蛐",
     "directories": {
-      "output": "dist"
+      "output": "release"
     },
     "files": [
       "main.js",
@@ -106,13 +106,40 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "deb",
+          "arch": [
+            "x64"
+          ]
         }
       ],
-      "artifactName": "ququ-v${version}.AppImage",
+      "artifactName": "ququ-v${version}.${ext}",
       "maintainer": "yan5xu <lueco.x@gmail.com>",
       "synopsis": "蛐蛐 - 中文语音输入工具",
       "description": "开源免费的 Wispr Flow 替代方案，基于 FunASR 本地语音识别和可配置 AI 模型的语音转文字桌面应用。"
     },
+    "deb": {
+      "depends": [
+        "libgtk-3-0 (>= 3.22)",
+        "libnss3 (>= 2:3.35)",
+        "libasound2 (>= 1.0.16)",
+        "libx11-6",
+        "libxcomposite1",
+        "libxdamage1",
+        "libxext6",
+        "libxfixes3",
+        "libxrandr2",
+        "libgbm1",
+        "libpango-1.0-0",
+        "libcairo2",
+        "libdrm2"
+      ]
+    },
+    "electronLanguages": [
+      "zh-CN",
+      "en-US"
+    ],
     "win": {
       "icon": "assets/icon.png",
       "target": [
