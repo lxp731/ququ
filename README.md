@@ -6,7 +6,7 @@
 
 <img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg" alt="License">
 <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey" alt="Platform">
-<img src="https://img.shields.io/badge/release-v1.1.2-brightgreen" alt="Release">
+<img src="https://img.shields.io/badge/release-v1.1.5-brightgreen" alt="Release">
 <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome">
 
 </div>
@@ -84,7 +84,7 @@ pnpm run dev
 
 #### 4. 配置 AI 模型（可选）
 
-启动应用后，在**设置页面**中填入 AI 服务商的 **API Key**、**Base URL** 和**模型名称**。支持通义千问、Kimi、智谱AI 等国产模型。
+启动应用后，在**设置页面**中填入 AI 服务商的 **API Key**、**Base URL** 和**模型名称**。内置 DeepSeek / Qwen / OpenAI 一键预设，也支持其他兼容 OpenAI API 的服务商。
 
 ---
 
@@ -144,7 +144,7 @@ chmod +x ququ-v*.AppImage
 
 #### 4. 配置 AI 模型（可选）
 
-启动应用后，在**设置页面**中填入 AI 服务商的 **API Key**、**Base URL** 和**模型名称**。支持通义千问、Kimi、智谱AI 等国产模型。
+启动应用后，在**设置页面**中填入 AI 服务商的 **API Key**、**Base URL** 和**模型名称**。内置 DeepSeek / Qwen / OpenAI 一键预设，也支持其他兼容 OpenAI API 的服务商。
 
 > **提示**：
 >1. 如果后端部署在其他主机，可在设置页面中修改 FunASR 后端地址，指向远程服务。
@@ -209,7 +209,7 @@ podman logs -f ququ-backend # 查看日志
 | 桌面框架 | Electron 36 |
 | 前端 | React 19, Vite 6, Tailwind CSS 4, shadcn/ui |
 | 语音识别 | FunASR (Paraformer-large, FSMN-VAD, CT-Transformer) |
-| AI 文本优化 | 兼容 OpenAI API（通义千问、Kimi、智谱等） |
+| AI 文本优化 | 兼容 OpenAI API（内置 DeepSeek / Qwen / OpenAI 预设） |
 | 后端框架 | Flask + gunicorn |
 | 容器化 | Podman / Docker Compose |
 | 数据库 | better-sqlite3 |

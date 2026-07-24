@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 import { Search, Copy, Trash2, Download, Clock, History, FileText, ChevronRight } from 'lucide-react';
 import './index.css';
 
@@ -66,8 +66,6 @@ const HistoryPage = () => {
 
   return (
     <div className="h-screen animated-bg flex flex-col">
-      <Toaster theme="dark" position="top-center" richColors />
-
       {/* Header */}
       <div className="glass border-b-0 rounded-none px-6 py-4 flex items-center justify-between flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -75,9 +73,22 @@ const HistoryPage = () => {
           <h1 className="text-lg font-bold text-white">转录历史</h1>
           <span className="text-xs text-white/20">({filtered.length})</span>
         </div>
-        <button onClick={handleExport} className="p-2 rounded-lg hover:bg-white/10 transition-colors" title="导出">
-          <Download className="w-4 h-4 text-white/50" />
-        </button>
+        <div className="flex items-center gap-1">
+          <button onClick={async () => {
+            if (!window.confirm('确定要清空所有转录记录吗？此操作不可撤销。')) return;
+            try {
+              await window.electronAPI?.clearAllTranscriptions();
+              setItems([]);
+              setSelected(null);
+              toast.success('已清空所有记录');
+            } catch (_) { toast.error('清空失败'); }
+          }} className="p-2 rounded-lg hover:bg-red-500/20 transition-colors" title="清空全部">
+            <Trash2 className="w-4 h-4 text-red-400/50" />
+          </button>
+          <button onClick={handleExport} className="p-2 rounded-lg hover:bg-white/10 transition-colors" title="导出">
+            <Download className="w-4 h-4 text-white/50" />
+          </button>
+        </div>
       </div>
 
       {/* Search */}

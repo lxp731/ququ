@@ -55,6 +55,6 @@ entrypoint.sh                      funasr_server.py 模块加载
 
 ## 代码结构
 
-- `funasr_server.py` — Flask 应用 + FunASR 模型封装 (FunASRServer 类) + 模型下载逻辑
+- `funasr_server.py` — Flask 应用 + FunASR 模型封装 (FunASRServer 类) + 模型下载逻辑。**注意**：模型初始化用多线程并行加载，`suppress_stdout()` 上下文管理器操作全局 `sys.stdout`；`initialize()` 结束时强制恢复 `sys.stdout` 防止竞态破坏
 - `download_models.py` — 独立的模型下载脚本（容器入口使用）
 - `entrypoint.sh` — 容器启动脚本，先下载模型再启动 gunicorn（`set -e`，任一步失败则退出）

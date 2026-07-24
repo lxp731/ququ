@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { motion } from 'framer-motion';
-import { toast, Toaster } from 'sonner';
+import { toast } from 'sonner';
 import { Settings, Save, Eye, EyeOff, Loader2, TestTube, Mic, Shield, Zap, Cpu, ChevronDown, Server } from 'lucide-react';
 import './index.css';
 import { usePermissions } from './hooks/usePermissions';
@@ -18,7 +18,10 @@ const Input = ({ label, hint, ...props }) => (
 // 自定义下拉组件 — 完全控制背景/字体色
 const ModelSelect = ({ value, onChange, options, fetching, children }) => {
   const [open, setOpen] = useState(false);
+  const [customizing, setCustomizing] = useState(false);
+  const [draft, setDraft] = useState('');
   const ref = React.useRef(null);
+  const inputRef = React.useRef(null);
   useEffect(() => {
     const handler = (e) => { if (ref.current && !ref.current.contains(e.target)) setOpen(false); };
     document.addEventListener('mousedown', handler);
@@ -28,21 +31,46 @@ const ModelSelect = ({ value, onChange, options, fetching, children }) => {
   const handleSelect = (v) => {
     onChange(v);
     setOpen(false);
+    setCustomizing(false);
   };
 
+  const commitCustom = () => {
+    const v = draft.trim();
+    if (v) onChange(v);
+    setOpen(false);
+    setCustomizing(false);
+  };
+
+  const isPreset = ['deepseek-v4-flash', 'deepseek-v4-pro', 'qwen3.7-max', 'qwen3.5-max', 'gpt-4o-mini', 'gpt-4o'].includes(value);
   const btnText = fetching ? '正在获取模型列表…'
     : options.length > 0 ? (options.find(o => o.value === value)?.label || value || '选择模型')
     : value || '选择模型';
 
   return (
     <div ref={ref} className="relative">
-      <button type="button" onClick={() => setOpen(!open)}
+      <button type="button" onClick={() => { setOpen(!open); setCustomizing(false); }}
         className="w-full flex items-center justify-between px-3 py-2 text-sm bg-white/[0.04] border border-white/[0.08] rounded-lg hover:border-white/20 transition-all text-white text-left">
         <span className={value ? 'text-white' : 'text-white/25'}>{btnText}</span>
         <ChevronDown className={`w-3.5 h-3.5 text-white/30 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="absolute z-50 top-full left-0 right-0 mt-1 max-h-56 overflow-y-auto rounded-lg border border-white/[0.08] bg-[#1a1a2e] backdrop-blur-xl shadow-2xl">
+          {customizing ? (
+            <div className="flex items-center gap-2 px-2 py-2 border-b border-white/[0.06]">
+              <input ref={inputRef} autoFocus type="text" value={draft}
+                onChange={e => setDraft(e.target.value)}
+                onKeyDown={e => { if (e.key === 'Enter') commitCustom(); if (e.key === 'Escape') setCustomizing(false); }}
+                placeholder="输入模型名称…"
+                className="flex-1 px-2 py-1.5 text-sm bg-white/[0.06] border border-white/[0.08] rounded text-white placeholder-white/20 focus:outline-none focus:border-indigo-500/50" />
+              <button onClick={commitCustom}
+                className="text-xs px-2 py-1.5 rounded bg-indigo-500/20 text-indigo-300 hover:bg-indigo-500/30 transition-colors whitespace-nowrap">确认</button>
+            </div>
+          ) : (
+            <button type="button" onClick={() => { setCustomizing(true); setDraft(value && !isPreset ? value : ''); }}
+              className="w-full text-left px-3 py-2 text-sm text-white/40 hover:bg-white/[0.08] transition-colors border-b border-white/[0.06]">
+              ⚡ 自定义模型…
+            </button>
+          )}
           {fetching && (
             <div className="flex items-center gap-2 px-3 py-2 text-xs text-white/30">
               <Loader2 className="w-3 h-3 animate-spin" /> 获取中…
@@ -56,10 +84,6 @@ const ModelSelect = ({ value, onChange, options, fetching, children }) => {
               </button>
             ))
           ) : !fetching ? (children) : null}
-          <button type="button" onClick={() => handleSelect('__custom__')}
-            className="w-full text-left px-3 py-2 text-sm text-white/40 hover:bg-white/[0.08] transition-colors border-t border-white/[0.06]">
-            ⚡ 自定义模型…
-          </button>
         </div>
       )}
     </div>
@@ -79,7 +103,6 @@ const SettingsPage = () => {
   const [testingBackend, setTestingBackend] = useState(false);
   const [availableModels, setAvailableModels] = useState([]);
   const [fetchingModels, setFetchingModels] = useState(false);
-  const [customModel, setCustomModel] = useState(false);
   const fetchedRef = React.useRef('');
 
   const showAlert = (a) => toast(a.title, { description: a.description, duration: 4000 });
@@ -114,14 +137,6 @@ const SettingsPage = () => {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [settings.ai_api_key, settings.ai_base_url]);
 
-  // 切换到自定义模型输入
-  useEffect(() => {
-    if (settings.ai_model === '__custom__') {
-      setCustomModel(true);
-      setSettings(p => ({ ...p, ai_model: '' }));
-    }
-  }, [settings.ai_model]);
-
   const loadSettings = async () => {
     try {
       setLoading(true);
@@ -134,8 +149,6 @@ const SettingsPage = () => {
           enable_ai_optimization: all.enable_ai_optimization !== false,
           funasr_base_url: all.funasr_base_url || '',
         });
-        const preset = ['gpt-3.5-turbo', 'gpt-4', 'gpt-4-turbo', 'gpt-4o', 'gpt-4o-mini', 'qwen3-30b-a3b-instruct-2507'];
-        setCustomModel(!preset.includes(all.ai_model) && !all.ai_model);
       }
     } catch (e) { toast.error('加载设置失败'); }
     finally { setLoading(false); }
@@ -204,7 +217,6 @@ const SettingsPage = () => {
 
   return (
     <div className="h-screen animated-bg flex flex-col">
-      <Toaster theme="dark" position="top-center" richColors />
       {/* Header */}
       <div className="glass border-b-0 rounded-none px-6 py-4 flex items-center flex-shrink-0">
         <div className="flex items-center gap-3">
@@ -229,7 +241,7 @@ const SettingsPage = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full ${micPermissionGranted ? 'bg-emerald-400' : 'bg-white/20'}`} />
-                  <button onClick={requestMicPermission} className="text-xs px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-white/50 transition-colors">测试</button>
+                  <button onClick={requestMicPermission} className="text-xs px-2 py-1 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 transition-colors">测试</button>
                 </div>
               </div>
               <div className="flex items-center justify-between p-3 rounded-lg bg-white/[0.02]">
@@ -239,7 +251,7 @@ const SettingsPage = () => {
                 </div>
                 <div className="flex items-center gap-2">
                   <span className={`w-2 h-2 rounded-full ${accessibilityPermissionGranted ? 'bg-emerald-400' : 'bg-white/20'}`} />
-                  <button onClick={testAccessibilityPermission} className="text-xs px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-white/50 transition-colors">测试</button>
+                  <button onClick={testAccessibilityPermission} className="text-xs px-2 py-1 rounded bg-indigo-500/20 hover:bg-indigo-500/30 text-indigo-300 transition-colors">测试</button>
                 </div>
               </div>
             </div>
@@ -302,48 +314,40 @@ const SettingsPage = () => {
                 <div className="flex items-center justify-between mb-1.5">
                   <label className="text-xs font-medium text-white/60">AI 模型</label>
                   <div className="flex gap-1">
-                    <button onClick={() => { setSettings(p => ({ ...p, ai_base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', ai_model: 'qwen3-30b-a3b-instruct-2507' })); }}
-                      className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors">阿里云</button>
-                    <button onClick={() => { setSettings(p => ({ ...p, ai_base_url: 'https://api.openai.com/v1', ai_model: 'gpt-3.5-turbo' })); }}
+                    <button onClick={() => { setSettings(p => ({ ...p, ai_base_url: 'https://api.deepseek.com/v1', ai_model: 'deepseek-v4-flash' })); }}
+                      className="text-[10px] px-2 py-0.5 rounded bg-indigo-500/10 text-indigo-400 hover:bg-indigo-500/20 transition-colors">DeepSeek</button>
+                    <button onClick={() => { setSettings(p => ({ ...p, ai_base_url: 'https://dashscope.aliyuncs.com/compatible-mode/v1', ai_model: 'qwen3.7-max' })); }}
+                      className="text-[10px] px-2 py-0.5 rounded bg-emerald-500/10 text-emerald-400 hover:bg-emerald-500/20 transition-colors">Qwen</button>
+                    <button onClick={() => { setSettings(p => ({ ...p, ai_base_url: 'https://api.openai.com/v1', ai_model: 'gpt-4o-mini' })); }}
                       className="text-[10px] px-2 py-0.5 rounded bg-blue-500/10 text-blue-400 hover:bg-blue-500/20 transition-colors">OpenAI</button>
                   </div>
                 </div>
 
-                {/* 动态模型下拉 */}
+                {/* 模型下拉 */}
                 <div className="space-y-2">
-                  {!customModel && (
-                    <ModelSelect
-                      value={settings.ai_model}
-                      onChange={(v) => setSettings(p => ({ ...p, ai_model: v }))}
-                      fetching={fetchingModels}
-                      options={
-                        availableModels.length > 0
+                  <ModelSelect
+                    value={settings.ai_model}
+                    onChange={(v) => setSettings(p => ({ ...p, ai_model: v }))}
+                    fetching={fetchingModels}
+                    options={
+                      (() => {
+                        const models = availableModels.length > 0
                           ? availableModels.map(m => ({ value: m, label: m }))
-                          : [
-                              { value: 'gpt-4o', label: 'GPT-4o' },
-                              { value: 'gpt-4o-mini', label: 'GPT-4o Mini' },
-                              { value: 'gpt-4-turbo', label: 'GPT-4 Turbo' },
-                              { value: 'gpt-4', label: 'GPT-4' },
-                              { value: 'gpt-3.5-turbo', label: 'GPT-3.5 Turbo' },
-                              { value: 'qwen3-30b-a3b-instruct-2507', label: 'Qwen3-30B (推荐)' },
-                            ]
-                      }
-                    />
-                  )}
-
-                  {customModel && (
-                    <div className="flex gap-2">
-                      <input type="text" value={settings.ai_model}
-                        onChange={e => setSettings(p => ({ ...p, ai_model: e.target.value }))}
-                        placeholder="输入模型名称，如 qwen-plus"
-                        className="flex-1 px-3 py-2 text-sm bg-white/[0.04] border border-white/[0.08] rounded-lg focus:ring-2 focus:ring-indigo-500/50 focus:border-transparent text-white placeholder-white/20 transition-all" />
-                      {availableModels.length > 0 && (
-                        <button onClick={() => { setCustomModel(false); setSettings(p => ({ ...p, ai_model: availableModels[0] || 'gpt-3.5-turbo' })); }}
-                          className="text-xs px-2 py-1 rounded bg-white/5 hover:bg-white/10 text-white/40 transition-colors whitespace-nowrap">选择模型</button>
-                      )}
-                    </div>
-                  )}
-
+                          : [];
+                        // DeepSeek 模型互斥显示：当前为 flash → 显示 pro，当前为 pro → 显示 flash
+                        const peerMap = {
+                          'deepseek-v4-flash': 'deepseek-v4-pro', 'deepseek-v4-pro': 'deepseek-v4-flash',
+                          'qwen3.7-max': 'qwen3.5-max', 'qwen3.5-max': 'qwen3.7-max',
+                          'gpt-4o-mini': 'gpt-4o', 'gpt-4o': 'gpt-4o-mini',
+                        };
+                        const peer = peerMap[settings.ai_model];
+                        if (peer && !models.some(m => m.value === peer)) {
+                          models.push({ value: peer, label: peer });
+                        }
+                        return models;
+                      })()
+                    }
+                  />
                 </div>
               </div>
 
@@ -386,6 +390,6 @@ export default SettingsPage;
 // Standalone render
 if (document.getElementById('settings-root')) {
   ReactDOM.createRoot(document.getElementById('settings-root')).render(
-    <React.StrictMode><SettingsPage /><Toaster theme="dark" position="top-center" richColors /></React.StrictMode>
+    <React.StrictMode><SettingsPage /></React.StrictMode>
   );
 }

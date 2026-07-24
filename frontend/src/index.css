@@ -111,3 +111,7 @@ body {
 
 /* ── Sonner overrides ── */
 [data-sonner-toaster] { font-family: inherit; }
+[data-sonner-toast] [data-close-button] {
+  left: auto !important;
+  right: -10px !important;
+}

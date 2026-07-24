@@ -127,7 +127,7 @@ app 启动
 
 | 平台 | 实现方式 | 底层 API |
 |------|---------|----------|
-| Linux | Python 子进程读 `/dev/input/event*` | evdev 原始键盘事件 |
+| Linux | Python 子进程读 `/dev/input/event*`，`select` 多路复用监听全部键盘 | evdev 原始键盘事件 |
 | Windows | PowerShell + C# P/Invoke 子进程 | `user32.dll` `GetAsyncKeyState` 10ms 轮询 |
 | macOS | 不支持 | 前端自动回退到 toggle 模式 |
 

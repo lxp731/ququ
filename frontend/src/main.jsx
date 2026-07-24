@@ -36,7 +36,7 @@ root.render(
   <React.StrictMode>
     <ErrorBoundary>
       <App />
-      <Toaster theme="dark" position="top-center" richColors closeButton />
+      <Toaster theme="dark" position="bottom-center" richColors closeButton duration={2000} />
     </ErrorBoundary>
   </React.StrictMode>
 );

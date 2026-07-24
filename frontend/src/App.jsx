@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-import { Mic, Settings, History, Copy, Download, Sparkles, Keyboard, Timer } from 'lucide-react';
+import { Mic, Settings, History, Copy, Sparkles, Keyboard, Timer } from 'lucide-react';
 import './index.css';
 import { useHotkey } from './hooks/useHotkey';
 import { useRecording } from './hooks/useRecording';
@@ -10,17 +10,24 @@ import { useModelStatus } from './hooks/useModelStatus';
 // ═══════════════════════════════════════════
 //  Subtle animated background dots
 // ═══════════════════════════════════════════
+const dots = Array.from({ length: 20 }, (_, i) => ({
+  left: Math.random() * 100,
+  top: Math.random() * 100,
+  duration: 2 + Math.random() * 3,
+  delay: Math.random() * 2,
+}));
+
 const BgDots = () => (
   <div className="absolute inset-0 overflow-hidden pointer-events-none">
-    {[...Array(20)].map((_, i) => (
+    {dots.map((d, i) => (
       <div
         key={i}
         className="absolute w-1 h-1 rounded-full bg-white/10"
         style={{
-          left: `${Math.random() * 100}%`,
-          top: `${Math.random() * 100}%`,
-          animation: `pulse ${2 + Math.random() * 3}s ease-in-out infinite`,
-          animationDelay: `${Math.random() * 2}s`,
+          left: `${d.left}%`,
+          top: `${d.top}%`,
+          animation: `pulse ${d.duration}s ease-in-out infinite`,
+          animationDelay: `${d.delay}s`,
         }}
       />
     ))}
@@ -30,12 +37,15 @@ const BgDots = () => (
 // ═══════════════════════════════════════════
 //  Animated Waveform
 // ═══════════════════════════════════════════
+const waveColors = { indigo: '#818cf8', violet: '#a78bfa' };
+
 const Waveform = ({ active, color = 'indigo' }) => (
   <div className="flex items-center justify-center gap-0.5 h-8">
     {[...Array(16)].map((_, i) => (
       <motion.div
         key={i}
-        className={`w-0.5 rounded-full bg-${color}-400`}
+        className="w-0.5 rounded-full"
+        style={{ backgroundColor: waveColors[color] || waveColors.indigo }}
         animate={active ? {
           height: [4, Math.random() * 24 + 4, 4],
           opacity: [0.4, 1, 0.4],
@@ -138,7 +148,11 @@ const Tooltip = ({ children, content, position = "top" }) => {
             }`}
           >
             {content}
-            <div className="absolute top-full left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-white/10" />
+            <div className={`absolute left-1/2 -translate-x-1/2 w-0 h-0 border-l-4 border-r-4 border-transparent ${
+              isTop
+                ? 'top-full border-t-4 border-t-white/10'
+                : 'bottom-full border-b-4 border-b-white/10'
+            }`} />
           </motion.div>
         )}
       </AnimatePresence>
@@ -176,7 +190,7 @@ const TextPanel = ({ original, processed, isOptimizing, onCopy, onPaste }) => {
         <motion.div
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
-          className="glass-light p-4 border-indigo-400/20"
+          className="glass-light p-4 border-indigo-400/20 group"
         >
           <div className="flex items-center justify-between mb-2">
             <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-indigo-300/70">
@@ -184,16 +198,10 @@ const TextPanel = ({ original, processed, isOptimizing, onCopy, onPaste }) => {
             </span>
             <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
               {processed && (
-                <>
-                  <button onClick={() => onPaste(processed)}
-                    className="p-1.5 rounded-lg hover:bg-indigo-500/20 transition-colors" title="粘贴">
-                    <Download className="w-3.5 h-3.5 text-indigo-400/70" />
-                  </button>
-                  <button onClick={() => onCopy(processed)}
-                    className="p-1.5 rounded-lg hover:bg-indigo-500/20 transition-colors" title="复制">
-                    <Copy className="w-3.5 h-3.5 text-indigo-400/70" />
-                  </button>
-                </>
+                <button onClick={() => onCopy(processed)}
+                  className="p-1.5 rounded-lg hover:bg-indigo-500/20 transition-colors" title="复制">
+                  <Copy className="w-3.5 h-3.5 text-indigo-400/70" />
+                </button>
               )}
             </div>
           </div>
