@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import ReactDOM from 'react-dom/client';
 import { motion } from 'framer-motion';
-import { toast } from 'sonner';
+import { toast, Toaster } from 'sonner';
 import { Settings, Save, Eye, EyeOff, Loader2, TestTube, Mic, Shield, Zap, Cpu, ChevronDown, Server } from 'lucide-react';
 import './index.css';
 import { usePermissions } from './hooks/usePermissions';
@@ -390,6 +390,9 @@ export default SettingsPage;
 // Standalone render
 if (document.getElementById('settings-root')) {
   ReactDOM.createRoot(document.getElementById('settings-root')).render(
-    <React.StrictMode><SettingsPage /></React.StrictMode>
+    <React.StrictMode>
+      <SettingsPage />
+      <Toaster theme="dark" position="bottom-center" richColors closeButton duration={2000} />
+    </React.StrictMode>
   );
 }

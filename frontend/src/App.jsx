@@ -244,6 +244,7 @@ export default function App() {
   const [recordingMode, setRecordingMode] = useState('toggle');
   const [isCapturingHotkey, setIsCapturingHotkey] = useState(false);
   const [appVersion, setAppVersion] = useState('');
+  const [isPackaged, setIsPackaged] = useState(false);
 
   const modelStatus = useModelStatus();
   const { isRecording, isProcessing: isRecProcessing, startRecording, stopRecording } = useRecording(modelStatus);
@@ -255,6 +256,7 @@ export default function App() {
   useEffect(() => {
     window.electronAPI?.getSetting('recording_mode', 'toggle').then(setRecordingMode);
     window.electronAPI?.getAppVersion().then(v => setAppVersion(v || ''));
+    window.electronAPI?.getSystemInfo().then(info => { if (info?.isPackaged) setIsPackaged(true); });
   }, []);
 
   // Safe paste with dedup
@@ -530,7 +532,7 @@ export default function App() {
                     {modelStatus.stage === 'downloading' && `下载中 ${modelStatus.downloadProgress || 0}%`}
                     {modelStatus.stage === 'loading' && '模型加载中...'}
                   </span>
-                  {modelStatus.stage === 'need_download' && (
+                  {modelStatus.stage === 'need_download' && !isPackaged && (
                     <button onClick={async () => {
                       toast.info('开始下载模型...');
                       const r = await window.electronAPI?.downloadModel();
@@ -569,13 +571,15 @@ export default function App() {
                   </span>
                   {modelStatus.stage === 'need_backend' && (
                     <div className="flex gap-2">
-                      <button onClick={async () => {
-                        toast.info('正在启动本地后端...');
-                        const r = await modelStatus.startLocalBackend();
-                        if (r?.success) toast.success('后端启动成功');
-                      }} className="text-xs px-3 py-1 bg-emerald-500/20 text-emerald-300 rounded-lg hover:bg-emerald-500/30 transition-colors">
-                        启动本地
-                      </button>
+                      {!isPackaged && (
+                        <button onClick={async () => {
+                          toast.info('正在启动本地后端...');
+                          const r = await modelStatus.startLocalBackend();
+                          if (r?.success) toast.success('后端启动成功');
+                        }} className="text-xs px-3 py-1 bg-emerald-500/20 text-emerald-300 rounded-lg hover:bg-emerald-500/30 transition-colors">
+                          启动本地
+                        </button>
+                      )}
                       <button onClick={() => window.electronAPI?.openSettingsWindow()}
                         className="text-xs px-3 py-1 bg-indigo-500/20 text-indigo-300 rounded-lg hover:bg-indigo-500/30 transition-colors">
                         手动设置

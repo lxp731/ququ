@@ -150,7 +150,7 @@ class IPCHandlers {
     });
 
     // ── 系统 ──
-    ipcMain.handle('get-system-info', () => ({ platform: process.platform, arch: process.arch, nodeVersion: process.version, electronVersion: process.versions.electron }));
+    ipcMain.handle('get-system-info', () => ({ platform: process.platform, arch: process.arch, nodeVersion: process.version, electronVersion: process.versions.electron, isPackaged: app.isPackaged }));
     ipcMain.handle('get-app-version', () => app.getVersion());
     ipcMain.handle('check-permissions', async () => {
       const a11y = await this.clip.checkAccessibilityPermissions().catch(() => false);

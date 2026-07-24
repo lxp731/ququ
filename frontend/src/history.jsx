@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { createRoot } from 'react-dom/client';
 import { motion, AnimatePresence } from 'framer-motion';
-import { toast } from 'sonner';
+import { toast, Toaster } from 'sonner';
 import { Search, Copy, Trash2, Download, Clock, History, FileText, ChevronRight } from 'lucide-react';
 import './index.css';
 
@@ -203,6 +203,9 @@ const HistoryPage = () => {
 const container = document.getElementById('history-root');
 if (container) {
   createRoot(container).render(
-    <React.StrictMode><HistoryPage /></React.StrictMode>
+    <React.StrictMode>
+      <HistoryPage />
+      <Toaster theme="dark" position="bottom-center" richColors closeButton duration={2000} />
+    </React.StrictMode>
   );
 }
