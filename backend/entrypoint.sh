@@ -7,10 +7,10 @@
 set -e
 
 echo "[entrypoint] 开始模型检查..." >&2
-uv run python3 /app/download_models.py
+/app/.venv/bin/python3 /app/download_models.py
 
 echo "[entrypoint] 启动 FunASR 服务..." >&2
-exec uv run gunicorn --bind 0.0.0.0:8000 \
+exec /app/.venv/bin/gunicorn --bind ${FUNASR_HOST:-0.0.0.0}:${FUNASR_PORT:-8000} \
     --workers 1 --threads 4 \
     --timeout 300 --graceful-timeout 30 \
     "funasr_server:app"

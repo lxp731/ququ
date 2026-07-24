@@ -11,7 +11,35 @@ import contextlib
 import argparse
 import glob
 import tempfile
+import threading
 from pathlib import Path
+
+# ---------------------------------------------------------------------------
+# 加载 .env 文件（仅设置未定义的环境变量，已有则保留）
+# ---------------------------------------------------------------------------
+def _load_dotenv():
+    """从项目根目录 .env 加载环境变量（仅在变量未设置时生效）"""
+    env_path = Path(__file__).resolve().parent.parent / ".env"
+    if not env_path.is_file():
+        return
+    try:
+        with open(env_path, "r", encoding="utf-8") as f:
+            for line in f:
+                line = line.strip()
+                if not line or line.startswith("#") or "=" not in line:
+                    continue
+                key, _, value = line.partition("=")
+                key = key.strip()
+                value = value.strip().strip('"').strip("'")
+                if key and value:
+                    os.environ.setdefault(key, value)
+    except Exception:
+        pass  # .env 加载失败不影响服务启动
+
+_load_dotenv()
+
+# PyTorch 并行线程数（需在所有 import 之前设置，torch 在 import 时读取此变量）
+os.environ.setdefault("OMP_NUM_THREADS", "4")
 
 from flask import Flask, request, jsonify
 from flask_cors import CORS
@@ -64,19 +92,12 @@ class FunASRServer:
         self.initialized = False
         self.transcription_count = 0
         self.total_audio_duration = 0.0
+        self._transcribe_lock = threading.Lock()
 
         self.damo_root = damo_root or os.environ.get("DAMO_ROOT")
 
         signal.signal(signal.SIGTERM, self._signal_handler)
         signal.signal(signal.SIGINT, self._signal_handler)
-        self._setup_runtime_environment()
-
-    def _setup_runtime_environment(self):
-        try:
-            os.environ["OMP_NUM_THREADS"] = "4"
-            logger.info("运行时环境变量设置完成")
-        except Exception as e:
-            logger.warning(f"环境设置失败: {str(e)}")
 
     def _signal_handler(self, signum, frame):
         logger.info(f"收到信号 {signum}，准备退出...")
@@ -90,14 +111,13 @@ class FunASRServer:
     def _load_asr_model(self):
         try:
             logger.info("开始加载ASR模型...")
-            with suppress_stdout():
-                from funasr import AutoModel
-                self.asr_model = AutoModel(
-                    model="damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
-                    model_revision="v2.0.4",
-                    disable_update=True,
-                    device="cpu",
-                )
+            from funasr import AutoModel
+            self.asr_model = AutoModel(
+                model="damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch",
+                model_revision="v2.0.4",
+                disable_update=True,
+                device="cpu",
+            )
             logger.info("ASR模型加载完成")
             return True
         except Exception as e:
@@ -107,14 +127,13 @@ class FunASRServer:
     def _load_vad_model(self):
         try:
             logger.info("开始加载VAD模型...")
-            with suppress_stdout():
-                from funasr import AutoModel
-                self.vad_model = AutoModel(
-                    model="damo/speech_fsmn_vad_zh-cn-16k-common-pytorch",
-                    model_revision="v2.0.4",
-                    disable_update=True,
-                    device="cpu",
-                )
+            from funasr import AutoModel
+            self.vad_model = AutoModel(
+                model="damo/speech_fsmn_vad_zh-cn-16k-common-pytorch",
+                model_revision="v2.0.4",
+                disable_update=True,
+                device="cpu",
+            )
             logger.info("VAD模型加载完成")
             return True
         except Exception as e:
@@ -128,19 +147,17 @@ class FunASRServer:
             logger.info("开始加载标点恢复模型...")
 
             import_start = time.time()
-            with suppress_stdout():
-                from funasr import AutoModel
+            from funasr import AutoModel
             import_time = time.time() - import_start
             logger.info(f"FunASR导入耗时: {import_time:.2f}秒")
 
             model_start = time.time()
-            with suppress_stdout():
-                self.punc_model = AutoModel(
-                    model="damo/punc_ct-transformer_zh-cn-common-vocab272727-pytorch",
-                    model_revision="v2.0.4",
-                    disable_update=True,
-                    device="cpu",
-                )
+            self.punc_model = AutoModel(
+                model="damo/punc_ct-transformer_zh-cn-common-vocab272727-pytorch",
+                model_revision="v2.0.4",
+                disable_update=True,
+                device="cpu",
+            )
             model_time = time.time() - model_start
             total_time = time.time() - start_time
             logger.info(f"标点恢复模型加载完成 - 耗时: {model_time:.2f}秒 / 总: {total_time:.2f}秒")
@@ -150,20 +167,15 @@ class FunASRServer:
             return False
 
     def initialize(self):
-        """并行初始化 FunASR 模型"""
+        """并行初始化 FunASR 模型（抑制 stdout 防止 FunASR 内部日志污染）"""
         if self.initialized:
             return {"success": True, "message": "模型已初始化"}
 
         try:
-            import threading
             import time
 
             logger.info("正在并行初始化FunASR模型...")
             start_time = time.time()
-
-            # 保存原始 stdout — suppress_stdout 在多线程中会互相覆盖，
-            # 导致 sys.stdout 被残留为已关闭的 /dev/null 文件描述符
-            _original_stdout = sys.stdout
 
             results = {}
 
@@ -173,23 +185,22 @@ class FunASRServer:
                 thread_time = time.time() - thread_start
                 logger.info(f"{model_name}模型加载线程耗时: {thread_time:.2f}秒")
 
-            threads = [
-                threading.Thread(target=load_model_thread, args=("asr", self._load_asr_model)),
-                threading.Thread(target=load_model_thread, args=("vad", self._load_vad_model)),
-                threading.Thread(target=load_model_thread, args=("punc", self._load_punc_model)),
-            ]
+            # suppress_stdout 放在主线程统一管理，避免多线程竞态
+            with suppress_stdout():
+                threads = [
+                    threading.Thread(target=load_model_thread, args=("asr", self._load_asr_model)),
+                    threading.Thread(target=load_model_thread, args=("vad", self._load_vad_model)),
+                    threading.Thread(target=load_model_thread, args=("punc", self._load_punc_model)),
+                ]
 
-            for thread in threads:
-                thread.start()
+                for thread in threads:
+                    thread.start()
 
-            for thread in threads:
-                thread.join(timeout=300)
-                if thread.is_alive():
-                    logger.error("模型加载线程超时")
-                    return {"success": False, "error": "模型加载超时", "type": "timeout_error"}
-
-            # 恢复原始 stdout，防止被 suppress_stdout 的竞态条件破坏
-            sys.stdout = _original_stdout
+                for thread in threads:
+                    thread.join(timeout=300)
+                    if thread.is_alive():
+                        logger.error("模型加载线程超时")
+                        return {"success": False, "error": "模型加载超时", "type": "timeout_error"}
 
             failed_models = [name for name, success in results.items() if not success]
             if failed_models:
@@ -216,7 +227,7 @@ class FunASRServer:
             return {"success": False, "error": error_msg, "type": "init_error"}
 
     def transcribe_audio(self, audio_path, options=None):
-        """转录音频文件"""
+        """转录音频文件（线程安全，同一时间只允许一个转录）"""
         if not self.initialized:
             init_result = self.initialize()
             if not init_result["success"]:
@@ -224,6 +235,9 @@ class FunASRServer:
 
         if not self.asr_model or not self.vad_model:
             return {"success": False, "error": "模型未加载"}
+
+        if not self._transcribe_lock.acquire(timeout=300):
+            return {"success": False, "error": "转录请求超时，服务器繁忙", "type": "busy_error"}
 
         try:
             if not os.path.exists(audio_path):
@@ -240,12 +254,6 @@ class FunASRServer:
             }
             if options:
                 default_options.update(options)
-
-            if default_options["use_vad"]:
-                self.vad_model.generate(
-                    input=audio_path, batch_size_s=default_options["batch_size_s"]
-                )
-                logger.info("VAD处理完成")
 
             asr_result = self.asr_model.generate(
                 input=audio_path,
@@ -277,7 +285,7 @@ class FunASRServer:
                 except Exception as e:
                     logger.warning(f"FunASR标点恢复失败，使用原始文本: {str(e)}")
 
-            duration = self._get_audio_duration(audio_path)
+            duration = self._record_audio_duration(audio_path)
             self.transcription_count += 1
 
             result = {
@@ -306,15 +314,55 @@ class FunASRServer:
             logger.error(error_msg)
             logger.error(traceback.format_exc())
             return {"success": False, "error": error_msg, "type": "transcription_error"}
+        finally:
+            self._transcribe_lock.release()
 
     def _get_audio_duration(self, audio_path):
+        """从 WAV 头读取音频时长（仅解析 RIFF header，不解码整个文件）"""
         try:
-            import librosa
-            duration = librosa.get_duration(filename=audio_path)
+            import struct
+            with open(audio_path, "rb") as f:
+                riff, size, wave = struct.unpack("<4sI4s", f.read(12))
+                if riff != b"RIFF" or wave != b"WAVE":
+                    return 0.0
+                # 遍历 chunk 找到 fmt 和 data
+                fmt_found = False
+                data_size = 0
+                sample_rate = 0
+                channels = 0
+                bits_per_sample = 0
+                while True:
+                    chunk_header = f.read(8)
+                    if len(chunk_header) < 8:
+                        break
+                    chunk_id, chunk_size = struct.unpack("<4sI", chunk_header)
+                    if chunk_id == b"fmt ":
+                        fmt_data = f.read(chunk_size)
+                        audio_format, channels, sample_rate = struct.unpack("<HHI", fmt_data[:8])
+                        if audio_format == 1:  # PCM
+                            bits_per_sample = struct.unpack("<H", fmt_data[14:16])[0]
+                        fmt_found = True
+                    elif chunk_id == b"data":
+                        data_size = chunk_size
+                        break
+                    else:
+                        f.seek(chunk_size, 1)
+                if data_size > 0 and sample_rate > 0 and channels > 0:
+                    total_samples = data_size / (channels * (bits_per_sample or 16) / 8)
+                    duration = total_samples / sample_rate
+                    return duration
+            return 0.0
+        except Exception:
+            return 0.0
+
+    def _record_audio_duration(self, audio_path):
+        """仅在统计采样点（每 10 次）记录音频时长，其余跳过以节省 I/O"""
+        # transcription_count 在下游累加，这里取当前值（尚未 +1）判断
+        if self.transcription_count % 10 == 0:
+            duration = self._get_audio_duration(audio_path)
             self.total_audio_duration += duration
             return duration
-        except:
-            return 0.0
+        return 0.0
 
     def _cleanup_memory(self):
         try:
@@ -368,6 +416,7 @@ class FunASRServer:
 # ---------------------------------------------------------------------------
 
 app = Flask(__name__)
+app.config['MAX_CONTENT_LENGTH'] = 50 * 1024 * 1024  # 50MB，超过返回 413
 CORS(app)
 
 # 全局服务实例（启动时初始化）
@@ -376,7 +425,10 @@ server: "FunASRServer | None" = None
 
 @app.route('/health', methods=['GET'])
 def health():
-    """存活 / 就绪探针"""
+    """存活 / 就绪探针（模型未就绪时返回 503，配合 K8s readiness probe）"""
+    global server
+    if server is None or not server.initialized:
+        return jsonify({"status": "not_ready"}), 503
     return jsonify({"status": "ok"})
 
 
@@ -413,7 +465,8 @@ def transcribe():
         options = {}
 
     suffix = Path(audio_file.filename or 'audio.wav').suffix or '.wav'
-    with tempfile.NamedTemporaryFile(suffix=suffix, delete=False) as tmp:
+    tmp_dir = os.environ.get("QUQU_TMP_DIR", tempfile.gettempdir())
+    with tempfile.NamedTemporaryFile(suffix=suffix, dir=tmp_dir, delete=False) as tmp:
         audio_file.save(tmp.name)
         tmp_path = tmp.name
 
@@ -493,7 +546,6 @@ _init_done = False
 
 def _download_models():
     """自动下载缺失模型（并行），返回 True 表示全部成功"""
-    import threading
     from modelscope.hub.snapshot_download import snapshot_download
 
     models = [
@@ -567,7 +619,7 @@ init_server()
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="FunASR HTTP 服务器")
-    parser.add_argument('--host', default='0.0.0.0', help='监听地址')
+    parser.add_argument('--host', default=os.environ.get('FUNASR_HOST', '0.0.0.0'), help='监听地址')
     parser.add_argument('--port', type=int, default=8000, help='监听端口')
     parser.add_argument('--debug', action='store_true', default=False)
     args = parser.parse_args()
