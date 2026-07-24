@@ -6,7 +6,17 @@ export const useHotkey = () => {
   const ref = useRef(null);
 
   useEffect(() => {
-    window.electronAPI?.getCurrentHotkey().then(k => { if (k) setHotkey(k); });
+    const init = async () => {
+      // 只在主窗口注册快捷键，设置页/控制面板跳过
+      const p = new URLSearchParams(window.location.search);
+      if (p.get('panel') === 'control' || p.get('page') === 'settings') return;
+      const savedKey = await window.electronAPI?.getSetting('global_hotkey', 'Ctrl+Space') || 'Ctrl+Space';
+      // 若用户已通过捕获面板注册过（ref 非空），不覆盖
+      if (ref.current) return;
+      const r = await window.electronAPI?.registerHotkey(savedKey);
+      if (r?.success) { ref.current = savedKey; setHotkey(savedKey); setIsRegistered(true); }
+    };
+    init();
   }, []);
 
   const registerHotkey = useCallback(async (newKey) => {

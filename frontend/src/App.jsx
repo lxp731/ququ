@@ -226,7 +226,6 @@ const TextPanel = ({ original, processed, isOptimizing, onCopy, onPaste }) => {
 export default function App() {
   const urlParams = new URLSearchParams(window.location.search);
   const isSettings = urlParams.get('page') === 'settings';
-  const isControl = urlParams.get('panel') === 'control';
 
   if (isSettings) {
     const SettingsPage = React.lazy(() => import('./settings.jsx'));
@@ -333,9 +332,16 @@ export default function App() {
       if (e.altKey) parts.push('Alt');
       parts.push(e.key === ' ' ? 'Space' : e.key.length === 1 ? e.key.toUpperCase() : e.key);
       const newKey = parts.join('+');
-      await unregisterHotkey(rawHotkey);
+      const oldKey = rawHotkey;
+      await unregisterHotkey(oldKey);
       const ok = await registerHotkey(newKey);
-      if (ok) await window.electronAPI?.setSetting('global_hotkey', newKey);
+      if (ok) {
+        await window.electronAPI?.setSetting('global_hotkey', newKey);
+      } else {
+        // 注册失败（可能被系统占用），恢复旧快捷键
+        await registerHotkey(oldKey);
+        toast.error(`快捷键 ${newKey} 注册失败，可能被占用`);
+      }
       setIsCapturingHotkey(false);
     };
     window.addEventListener('keydown', handler, true);
@@ -351,12 +357,18 @@ export default function App() {
   const stopRef = useRef(stopRecording);
   stopRef.current = stopRecording;
 
-  // Hold mode: KeyWatcher (evdev) 全局监听，追踪组合键 Ctrl/Meta + Space
+  // Hold mode: KeyWatcher (evdev) 全局监听
   const heldKeys = useRef(new Set());
 
   useEffect(() => {
     if (recordingMode !== 'hold') return;
-    window.electronAPI?.startHoldWatch().then(r => {
+
+    // 解析用户快捷键决定长按监听哪些键
+    const hotkeyParts = rawHotkey.split('+');
+    const triggerKey = hotkeyParts[hotkeyParts.length - 1];
+    const mods = hotkeyParts.slice(0, -1);
+
+    window.electronAPI?.startHoldWatch(rawHotkey).then(r => {
       if (!r?.success) {
         toast.warning('当前平台不支持长按模式，已切换回切换模式');
         setRecordingMode('toggle');
@@ -364,22 +376,20 @@ export default function App() {
       }
     });
 
-    const isModHeld = () => heldKeys.current.has('Control') || heldKeys.current.has('Meta') || heldKeys.current.has('Alt');
-    const isSpaceHeld = () => heldKeys.current.has('Space');
+    const isModHeld = () => mods.every(m => heldKeys.current.has(m));
+    const isTriggerHeld = () => heldKeys.current.has(triggerKey);
 
     const u1 = window.electronAPI?.onHoldKeyDown((data) => {
       const key = data?.key;
       heldKeys.current.add(key);
-      // 只有同时按住 Ctrl/Meta/Alt + Space 才触发录音
-      if (isSpaceHeld() && isModHeld() && !isRecordingRef.current && !isRecProcessingRef.current) {
+      if (isTriggerHeld() && isModHeld() && !isRecordingRef.current && !isRecProcessingRef.current) {
         startRef.current();
       }
     });
 
     const u2 = window.electronAPI?.onHoldKeyUp((data) => {
       const key = data?.key;
-      // Ctrl/Meta/Alt 或 Space 松开 → 停止录音
-      if ((isModHeld() || isSpaceHeld()) && isRecordingRef.current) {
+      if ((isModHeld() || isTriggerHeld()) && isRecordingRef.current) {
         stopRef.current();
       }
       heldKeys.current.delete(key);
@@ -390,7 +400,7 @@ export default function App() {
       heldKeys.current.clear();
       window.electronAPI?.stopHoldWatch();
     };
-  }, [recordingMode]);
+  }, [recordingMode, rawHotkey]);
 
   // isRecProcessing ref（避免闭包问题）
   const isRecProcessingRef = useRef(isRecProcessing);
@@ -407,11 +417,6 @@ export default function App() {
 
   // Sync recording state to main process
   useEffect(() => { syncRecordingState?.(isRecording); }, [isRecording, syncRecordingState]);
-
-  // Init hotkey
-  useEffect(() => {
-    if (!isControl) registerHotkey('Ctrl+Space');
-  }, []);
 
   const micState = isRecording ? 'recording' : (isRecProcessing || isOptimizing) ? 'processing' : isHovered ? 'hover' : 'idle';
 

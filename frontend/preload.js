@@ -61,7 +61,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onHotkeyTriggered: (cb) => on('hotkey-triggered', cb),
 
   // 长按模式 evdev 全局监听
-  startHoldWatch: () => ipcRenderer.invoke('start-hold-watch'),
+  startHoldWatch: (hotkey) => ipcRenderer.invoke('start-hold-watch', hotkey),
   stopHoldWatch: () => ipcRenderer.invoke('stop-hold-watch'),
   onHoldKeyDown: (cb) => on('hold-key-down', cb),
   onHoldKeyUp: (cb) => on('hold-key-up', cb),

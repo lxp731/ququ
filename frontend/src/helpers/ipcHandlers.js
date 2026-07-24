@@ -92,7 +92,6 @@ class IPCHandlers {
     ipcMain.handle('register-hotkey', (event, hotkey) => {
       try {
         const sid = event.sender.id;
-        if (this._registeredSenders.has(sid)) return { success: true };
         const ok = this.hotkey.registerHotkey(hotkey, () => {
           if (this.wm.mainWindow && !this.wm.mainWindow.isDestroyed()) {
             this.wm.mainWindow.webContents.send('hotkey-triggered', { hotkey });
@@ -105,8 +104,12 @@ class IPCHandlers {
         return { success: ok };
       } catch (e) { return { success: false, error: e.message }; }
     });
-    ipcMain.handle('unregister-hotkey', (_, hotkey) => {
-      try { return { success: this.hotkey.unregisterHotkey(hotkey) }; } catch (e) { return { success: false, error: e.message }; }
+    ipcMain.handle('unregister-hotkey', (event, hotkey) => {
+      try {
+        const ok = this.hotkey.unregisterHotkey(hotkey);
+        if (ok) this._registeredSenders.delete(event.sender.id);
+        return { success: ok };
+      } catch (e) { return { success: false, error: e.message }; }
     });
     ipcMain.handle('get-current-hotkey', () => {
       const keys = this.hotkey.getRegisteredHotkeys();
@@ -117,7 +120,7 @@ class IPCHandlers {
 
     // ── 长按模式：全局键盘监听 keydown+keyup（替代 globalShortcut）──
     // Linux: evdev   Windows: GetAsyncKeyState   macOS: 不支持
-    ipcMain.handle('start-hold-watch', () => {
+    ipcMain.handle('start-hold-watch', (_event, hotkey) => {
       if (!this.keyWatcher) return { success: false, error: 'KeyWatcher 不可用' };
       if (process.platform === 'darwin') return { success: false, error: 'macOS 暂不支持长按模式' };
       const win = this.wm.mainWindow;
@@ -135,15 +138,16 @@ class IPCHandlers {
         } else if (type === 'up') {
           wc.send('hold-key-up', { key: keyName });
         }
-      });
+      }, hotkey || 'Ctrl+Space');
       return { success: true };
     });
     ipcMain.handle('stop-hold-watch', () => {
       this.keyWatcher?.stop();
-      // 恢复全局快捷键 Ctrl+Space
+      // 恢复用户自定义的快捷键（从数据库读取，不硬编码）
       if (this.wm.mainWindow && !this.wm.mainWindow.isDestroyed()) {
-        this.hotkey.registerHotkey('Ctrl+Space', () => {
-          this.wm.mainWindow.webContents.send('hotkey-triggered', { hotkey: 'Ctrl+Space' });
+        const savedKey = this.db.getSetting('global_hotkey', 'Ctrl+Space') || 'Ctrl+Space';
+        this.hotkey.registerHotkey(savedKey, () => {
+          this.wm.mainWindow.webContents.send('hotkey-triggered', { hotkey: savedKey });
         });
       }
       return { success: true };

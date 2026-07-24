@@ -15,21 +15,38 @@
     "build:renderer": "vite build",
     "build:linux": "electron-builder --linux",
     "build:mac": "electron-builder --mac",
+    "test": "vitest run",
+    "test:watch": "vitest",
     "postinstall": "electron-builder install-app-deps",
     "preview": "vite preview"
   },
-  "keywords": ["dictation", "speech-to-text", "funasr", "ai", "chinese", "electron"],
-  "author": { "name": "yan5xu", "email": "lueco.x@gmail.com" },
+  "keywords": [
+    "dictation",
+    "speech-to-text",
+    "funasr",
+    "ai",
+    "chinese",
+    "electron"
+  ],
+  "author": {
+    "name": "yan5xu",
+    "email": "lueco.x@gmail.com"
+  },
   "license": "MIT",
   "devDependencies": {
     "@tailwindcss/vite": "^4.1.10",
+    "@testing-library/jest-dom": "^7.0.0",
+    "@testing-library/react": "^16.3.2",
+    "@testing-library/user-event": "^14.6.1",
     "@vitejs/plugin-react": "^4.4.1",
     "concurrently": "^8.2.2",
     "cross-env": "^10.0.0",
     "electron": "36.5.0",
     "electron-builder": "^24.6.4",
+    "jsdom": "^29.1.1",
     "tailwindcss": "^4.1.10",
-    "vite": "^6.3.5"
+    "vite": "^6.3.5",
+    "vitest": "^4.1.10"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.14",
@@ -38,8 +55,8 @@
     "@radix-ui/react-progress": "^1.1.7",
     "@radix-ui/react-select": "^2.2.5",
     "@radix-ui/react-slot": "^1.2.3",
-    "@radix-ui/react-tabs": "^1.1.12",
     "@radix-ui/react-switch": "^1.2.5",
+    "@radix-ui/react-tabs": "^1.1.12",
     "@radix-ui/react-tooltip": "^1.2.7",
     "axios": "^1.6.0",
     "better-sqlite3": "11.10.0",
@@ -55,7 +72,9 @@
   "build": {
     "appId": "com.ququ.app",
     "productName": "蛐蛐",
-    "directories": { "output": "dist" },
+    "directories": {
+      "output": "dist"
+    },
     "files": [
       "main.js",
       "preload.js",
@@ -81,7 +100,14 @@
     "linux": {
       "icon": "assets/icon.png",
       "category": "Office",
-      "target": [{ "target": "AppImage", "arch": ["x64"] }],
+      "target": [
+        {
+          "target": "AppImage",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
       "artifactName": "ququ-v${version}.AppImage",
       "maintainer": "yan5xu <lueco.x@gmail.com>",
       "synopsis": "蛐蛐 - 中文语音输入工具",
@@ -89,7 +115,14 @@
     },
     "win": {
       "icon": "assets/icon.png",
-      "target": [{ "target": "portable", "arch": ["x64"] }]
+      "target": [
+        {
+          "target": "portable",
+          "arch": [
+            "x64"
+          ]
+        }
+      ]
     },
     "portable": {
       "artifactName": "ququ-v${version}.exe"
