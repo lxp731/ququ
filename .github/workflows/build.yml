@@ -32,7 +32,7 @@ jobs:
       - name: Install system dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends libfuse2 rpm
+          sudo apt-get install -y --no-install-recommends libfuse2 dpkg fakeroot
 
       - name: Cache pnpm store
         uses: actions/cache@v4
@@ -48,7 +48,7 @@ jobs:
       - name: Build renderer
         run: cd frontend && pnpm run build:renderer
 
-      - name: Build AppImage
+      - name: Build Linux (AppImage + deb)
         run: cd frontend && npx electron-builder --linux --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -58,15 +58,15 @@ jobs:
         id: artifact
         run: |
           VERSION=$(node -p "require('./frontend/package.json').version")
-          ARTIFACT="ququ-v${VERSION}.AppImage"
-          echo "artifact_name=${ARTIFACT}" >> "$GITHUB_OUTPUT"
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Upload AppImage artifact
+      - name: Upload Linux artifacts
         uses: actions/upload-artifact@v4
         with:
-          name: ququ-linux-AppImage
-          path: frontend/dist/ququ-v*.AppImage
+          name: ququ-linux
+          path: |
+            frontend/release/ququ-v*.AppImage
+            frontend/release/ququ-v*.deb
           retention-days: 7
 
   build-windows:
@@ -110,7 +110,7 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: ququ-windows-portable
-          path: frontend/dist/ququ-v*.exe
+          path: frontend/release/ququ-v*.exe
           retention-days: 7
 
   release:
@@ -133,10 +133,10 @@ jobs:
           VERSION=$(node -p "require('./frontend/package.json').version")
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
 
-      - name: Download Linux artifact
+      - name: Download Linux artifacts
         uses: actions/download-artifact@v4
         with:
-          name: ququ-linux-AppImage
+          name: ququ-linux
           path: dist/
 
       - name: Download Windows artifact
@@ -160,8 +160,18 @@ jobs:
             ### 下载
             | 平台 | 文件 | 说明 |
             |------|------|------|
-            | 🐧 Linux | `ququ-v${{ steps.version.outputs.version }}.AppImage` | AppImage（~120MB）|
+            | 🐧 Linux | `ququ-v${{ steps.version.outputs.version }}.AppImage` | AppImage（通用 Linux）|
+            | 🐧 Linux | `ququ-v${{ steps.version.outputs.version }}.deb` | deb 包（Debian/Ubuntu/Mint）|
             | 🪟 Windows | `ququ-v${{ steps.version.outputs.version }}.exe` | 免安装便携版 |
+
+            ### 安装
+            ```bash
+            # deb（推荐 Ubuntu/Debian 用户）
+            sudo dpkg -i ququ-v${{ steps.version.outputs.version }}.deb
+
+            # AppImage（其他 Linux 发行版）
+            chmod +x ququ-v${{ steps.version.outputs.version }}.AppImage && ./ququ-v${{ steps.version.outputs.version }}.AppImage
+            ```
 
             ### 使用前准备（容器化后端）
 
@@ -173,6 +183,7 @@ jobs:
             🤖 Generated with [Claude Code](https://claude.com/claude-code)
           files: |
             dist/ququ-v*.AppImage
+            dist/ququ-v*.deb
             dist/ququ-v*.exe
             dist/checksums.txt
           draft: false
