@@ -14,16 +14,17 @@ class KeyWatcher {
     this._device = null;
   }
 
-  _findKeyboard() {
+  _findKeyboards() {
     const byPath = '/dev/input/by-path';
+    const devices = new Set();
     try {
       for (const name of fs.readdirSync(byPath)) {
         if (name.endsWith('-kbd') || name.endsWith('-event-kbd')) {
-          return fs.realpathSync(path.join(byPath, name));
+          devices.add(fs.realpathSync(path.join(byPath, name)));
         }
       }
     } catch (_) {}
-    return null;
+    return [...devices];
   }
 
   start(onKeyEvent) {
@@ -39,29 +40,38 @@ class KeyWatcher {
     }
   }
 
-  // ── Linux: evdev ──
+  // ── Linux: evdev（监听全部键盘设备）──
   _startLinux() {
-    const device = this._findKeyboard();
-    if (!device) { this.log?.error?.('[KeyWatcher] 找不到键盘设备'); return; }
-    this._device = device;
-    this.log?.info?.(`[KeyWatcher] 设备: ${device}`);
+    const devices = this._findKeyboards();
+    if (devices.length === 0) { this.log?.error?.('[KeyWatcher] 找不到键盘设备'); return; }
+    this.log?.info?.(`[KeyWatcher] 设备: ${devices.join(', ')}`);
 
+    const deviceList = JSON.stringify(devices);
     const script = `
-import struct, os, sys
+import struct, os, sys, select, json
 WATCH = {29:'Control',97:'Control',57:'Space',125:'Meta',126:'Meta',56:'Alt',100:'Alt'}
-fd = os.open('${device}', os.O_RDONLY)
+devices = json.loads('''${deviceList}''')
+fds = []
+for d in devices:
+    try:
+        fds.append(os.open(d, os.O_RDONLY))
+    except:
+        sys.stderr.write(f'[KeyWatcher] 无法打开设备: {d}\\n')
 sys.stdout.flush()
+if not fds:
+    sys.exit(1)
 while True:
     try:
-        data = os.read(fd, 24)
-        if len(data) < 24: break
-        tv_sec, tv_usec, typ, code, value = struct.unpack('LLHHI', data)
-        if typ == 1 and code in WATCH:
-            if value == 1:
-                sys.stdout.write('down:' + WATCH[code] + '\\n')
-                sys.stdout.flush()
-            elif value == 0:
-                sys.stdout.write('up:' + WATCH[code] + '\\n')
+        ready, _, _ = select.select(fds, [], [])
+        for fd in ready:
+            data = os.read(fd, 24)
+            if len(data) < 24: continue
+            tv_sec, tv_usec, typ, code, value = struct.unpack('LLHHI', data)
+            if typ == 1 and code in WATCH:
+                if value == 1:
+                    sys.stdout.write('down:' + WATCH[code] + '\\n')
+                elif value == 0:
+                    sys.stdout.write('up:' + WATCH[code] + '\\n')
                 sys.stdout.flush()
     except KeyboardInterrupt:
         break
