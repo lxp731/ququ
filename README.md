@@ -152,6 +152,29 @@ chmod +x ququ-v*.AppImage
 
 ---
 
+## 后端性能调优
+
+源码运行时通过 `.env` 文件中的以下环境变量控制性能：
+
+| 参数 | 作用 | 默认值 |
+|------|------|--------|
+| `FUNASR_WORKERS` | Gunicorn worker 进程数。每个 worker 独占一套模型（约 3GB 内存），同时只能处理一个转写请求（代码有互斥锁保护）。**增加 workers 是提升并发的唯一途径**，代价是内存成倍增长。 | `1` |
+| `OMP_NUM_THREADS` | PyTorch 推理时使用的 CPU 核心数。控制单次转写的计算速度，值越大转写越快，但不应超过 CPU 物理核心数。 | `4` |
+| `FUNASR_THREADS` | Gunicorn 线程数。线程不参与实际转写，仅用于排队等待锁。值略大于预期的并发排队数即可，对资源占用极小。 | `8` |
+
+> **经验公式**：`FUNASR_WORKERS × OMP_NUM_THREADS ≤ CPU 核数`，避免多个 worker 争抢 CPU 互相拖慢。
+
+**容器部署**：每个容器固定 `FUNASR_WORKERS=1`，通过水平扩缩容提升并发：
+
+```bash
+# 在 docker-compose.yml 同级目录下执行
+podman compose up -d --scale backend=2
+```
+
+> 注意：`docker-compose.yml` 中的 `container_name` 与 `--scale` 冲突，多实例部署前需注释掉该行。
+
+---
+
 ## 开发
 
 ### 项目结构
@@ -199,6 +222,12 @@ podman logs -f ququ-backend # 查看日志
 | `/status` | GET | 模型状态 |
 | `/transcribe` | POST | 上传音频（multipart/form-data），返回转录文本 |
 | `/stats` | GET | 性能统计 |
+
+---
+
+## 待办
+
+- [ ] **热词接口**：后端 `transcribe_audio` 已支持 `options["hotword"]` 参数，前端需要增加热词输入框，让用户自定义热词列表以提升特定场景下的识别准确率。
 
 ---
 
