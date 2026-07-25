@@ -614,15 +614,54 @@ init_server()
 
 
 # ---------------------------------------------------------------------------
+# gunicorn 程序化启动封装
+# ---------------------------------------------------------------------------
+
+import gunicorn.app.base as gunicorn_app_base
+
+
+class _GunicornApp(gunicorn_app_base.BaseApplication):
+    """将 Flask app 封装为 gunicorn Application，支持程序化传入配置"""
+
+    def __init__(self, flask_app, options=None):
+        self._flask_app = flask_app
+        self._options = options or {}
+        super().__init__()
+
+    def load_config(self):
+        for key, value in self._options.items():
+            if key in self.cfg.settings and value is not None:
+                self.cfg.set(key.lower(), value)
+
+    def load(self):
+        return self._flask_app
+
+
+# ---------------------------------------------------------------------------
 # 启动入口（python funasr_server.py 直接运行时使用）
 # ---------------------------------------------------------------------------
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description="FunASR HTTP 服务器")
     parser.add_argument('--host', default=os.environ.get('FUNASR_HOST', '0.0.0.0'), help='监听地址')
-    parser.add_argument('--port', type=int, default=8000, help='监听端口')
-    parser.add_argument('--debug', action='store_true', default=False)
+    parser.add_argument('--port', type=int, default=int(os.environ.get('FUNASR_PORT', '8000')), help='监听端口')
+    parser.add_argument('--debug', action='store_true', default=False, help='Flask 调试模式（仅开发使用，会禁用 gunicorn）')
     args = parser.parse_args()
 
-    logger.info(f"启动 HTTP 服务器 -> {args.host}:{args.port}")
-    app.run(host=args.host, port=args.port, debug=args.debug)
+    if args.debug:
+        logger.info(f"启动 Flask 开发服务器 -> {args.host}:{args.port}")
+        app.run(host=args.host, port=args.port, debug=True)
+    else:
+        workers = int(os.environ.get('FUNASR_WORKERS', '1'))
+        threads = int(os.environ.get('FUNASR_THREADS', '8'))
+        logger.info(
+            f"启动 gunicorn -> {args.host}:{args.port} "
+            f"(workers={workers}, threads={threads})"
+        )
+        _GunicornApp(app, {
+            'bind': f'{args.host}:{args.port}',
+            'workers': workers,
+            'threads': threads,
+            'timeout': 300,
+            'graceful_timeout': 30,
+        }).run()
