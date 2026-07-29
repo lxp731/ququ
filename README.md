@@ -26,14 +26,14 @@
 ## 架构
 
 ```
-┌──────────────────────────┐     HTTP REST     ┌─────────────────────┐
-│   Electron 桌面应用       │ ◄─────────────── ► │   FunASR 容器        │
-│   (前端，原生运行)         │   localhost:8000   │   (Python 后端)      │
-│                          │                    │                     │
-│   • 系统托盘 / 快捷键     │                    │   • 语音识别 (ASR)   │
-│   • 录音 / 剪贴板        │                    │   • VAD / 标点恢复   │
-│   • AI 文本优化          │                    │   • 模型本地运行     │
-└──────────────────────────┘                    └─────────────────────┘
+┌──────────────────────────┐     HTTP REST     ┌──────────┐     ┌─────────────────┐
+│   Electron 桌面应用       │ ◄─────────────── ► │  nginx   │ ──► │  FunASR 容器 ×N  │
+│   (前端，原生运行)         │   localhost:8000   │  反代    │     │  (Python 后端)   │
+│                          │                    └──────────┘     │                 │
+│   • 系统托盘 / 快捷键     │                                     │  • 语音识别 ASR  │
+│   • 录音 / 剪贴板        │                                     │  • VAD/标点恢复  │
+│   • AI 文本优化          │                                     │  • 模型本地运行   │
+└──────────────────────────┘                                     └─────────────────┘
 ```
 
 - **前端**：Electron + React，原生运行在桌面（需要托盘、快捷键、剪贴板权限）
@@ -116,7 +116,7 @@ cd ququ
 podman compose up -d --build
 
 # 查看日志，等待模型加载完成（首次约 1-2 分钟，需下载 ~1.2GB 模型）
-podman logs -f ququ-backend
+podman compose logs -f backend
 ```
 
 > 模型文件缓存于 `~/.cache/modelscope`，销毁重建容器无需重新下载。
@@ -167,11 +167,22 @@ chmod +x ququ-v*.AppImage
 **容器部署**：每个容器固定 `FUNASR_WORKERS=1`，通过水平扩缩容提升并发：
 
 ```bash
-# 在 docker-compose.yml 同级目录下执行
-podman compose up -d --scale backend=2
+# 扩容至 3 个后端实例
+podman compose up -d --scale backend=3
 ```
 
-> 注意：`docker-compose.yml` 中的 `container_name` 与 `--scale` 冲突，多实例部署前需注释掉该行。
+缩容时 `podman-compose`（Python 版）的 `--scale` 不生效，需手动操作：
+
+```bash
+# 先看当前有哪些实例
+podman ps --format '{{.Names}} {{.Status}}'
+
+# 停掉多余的实例
+podman stop ququ_backend_2 ququ_backend_3
+podman rm ququ_backend_2 ququ_backend_3
+```
+
+> nginx 通过 compose 内部 DNS 自动负载均衡到所有 backend 实例，无需额外配置。如果使用 Docker Compose，`--scale` 扩缩容均可直接生效。
 
 ---
 
@@ -192,7 +203,8 @@ ququ/
 │   ├── funasr_server.py   # Flask REST API
 │   ├── Dockerfile
 │   └── pyproject.toml     # uv 依赖管理
-└── docker-compose.yml     # Podman 编排
+├── nginx.conf             # nginx 反代配置
+└── docker-compose.yml     # Podman/Docker 编排
 ```
 
 ### 常用命令
@@ -211,7 +223,7 @@ pnpm run build:linux       # 打包 Linux AppImage
 podman compose build       # 构建容器镜像
 podman compose up -d       # 启动容器
 podman compose down        # 停止容器
-podman logs -f ququ-backend # 查看日志
+podman compose logs -f backend # 查看日志
 ```
 
 ### 后端 API
