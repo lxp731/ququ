@@ -1,4 +1,4 @@
-const { app, globalShortcut, BrowserWindow } = require('electron');
+const { app, globalShortcut, BrowserWindow, Menu } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 
@@ -84,7 +84,11 @@ async function startApp() {
   logger.info('应用启动完成');
 }
 
-app.whenReady().then(startApp);
+app.whenReady().then(() => {
+  // 去掉默认菜单栏（File | Edit | View | Window | Help）
+  if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
+  return startApp();
+});
 
 app.on('window-all-closed', () => {
   // 不退出，保留在托盘
