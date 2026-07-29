@@ -611,9 +611,7 @@ init_server()
 
 _IS_WINDOWS = sys.platform == 'win32'
 
-if _IS_WINDOWS:
-    _GunicornApp = None  # Windows 不支持 gunicorn
-else:
+if not _IS_WINDOWS:
     import gunicorn.app.base as gunicorn_app_base
 
     class _GunicornApp(gunicorn_app_base.BaseApplication):
@@ -656,7 +654,8 @@ if __name__ == '__main__':
             f"启动 gunicorn -> {args.host}:{args.port} "
             f"(workers={workers}, threads={threads})"
         )
-        _GunicornApp(app, {
+        _GunicornApp(  # pyright: ignore[reportPossiblyUnboundVariable]
+            app, {
             'bind': f'{args.host}:{args.port}',
             'workers': workers,
             'threads': threads,
