@@ -17,3 +17,8 @@ dependencies = [
 [tool.uv]
 # PyTorch 从 CPU-only 索引安装，节省 2-3GB
 extra-index-url = ["https://download.pytorch.org/whl/cpu"]
+
+[dependency-groups]
+dev = [
+    "ruff>=0.16.0",
+]

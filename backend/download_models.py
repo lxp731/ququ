@@ -1,5 +1,4 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 """
 FunASR 模型下载脚本
 并行下载所有模型文件到 MODELSCOPE_CACHE 目录（默认 /models）
@@ -26,7 +25,7 @@ def download_one(model_id, revision, results, idx):
     try:
         path = snapshot_download(model_id, revision=revision, cache_dir=CACHE_DIR)
         results[idx] = (True, path)
-    except Exception as e:
+    except Exception as e:  # noqa: BLE001
         results[idx] = (False, str(e))
 
 

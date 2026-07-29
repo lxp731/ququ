@@ -1,18 +1,19 @@
 #!/usr/bin/env python3
-# -*- coding: utf-8 -*-
 
-import sys
-import json
-import os
-import logging
-import traceback
-import signal
-import contextlib
 import argparse
+import contextlib
 import glob
+import json
+import logging
+import os
+import signal
+import struct
+import sys
 import tempfile
 import threading
+import traceback
 from pathlib import Path
+
 
 # ---------------------------------------------------------------------------
 # 加载 .env 文件（仅设置未定义的环境变量，已有则保留）
@@ -33,7 +34,7 @@ def _load_dotenv():
                 value = value.strip().strip('"').strip("'")
                 if key and value:
                     os.environ.setdefault(key, value)
-    except Exception:
+    except OSError:
         pass  # .env 加载失败不影响服务启动
 
 _load_dotenv()
@@ -41,7 +42,7 @@ _load_dotenv()
 # PyTorch 并行线程数（需在所有 import 之前设置，torch 在 import 时读取此变量）
 os.environ.setdefault("OMP_NUM_THREADS", "4")
 
-from flask import Flask, request, jsonify
+from flask import Flask, jsonify, request
 from flask_cors import CORS
 
 # ---------------------------------------------------------------------------
@@ -71,13 +72,12 @@ logger.info(f"FunASR服务器日志文件: {log_file_path}")
 def suppress_stdout():
     """临时重定向 stdout 到 devnull，防止 FunASR 内部日志污染 HTTP 输出"""
     old_stdout = sys.stdout
-    devnull = open(os.devnull, "w")
-    try:
+    with open(os.devnull, "w") as devnull:
         sys.stdout = devnull
-        yield
-    finally:
-        sys.stdout = old_stdout
-        devnull.close()
+        try:
+            yield
+        finally:
+            sys.stdout = old_stdout
 
 
 # ---------------------------------------------------------------------------
@@ -120,8 +120,8 @@ class FunASRServer:
             )
             logger.info("ASR模型加载完成")
             return True
-        except Exception as e:
-            logger.error(f"ASR模型加载失败: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"ASR模型加载失败: {e!s}")
             return False
 
     def _load_vad_model(self):
@@ -136,8 +136,8 @@ class FunASRServer:
             )
             logger.info("VAD模型加载完成")
             return True
-        except Exception as e:
-            logger.error(f"VAD模型加载失败: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"VAD模型加载失败: {e!s}")
             return False
 
     def _load_punc_model(self):
@@ -162,8 +162,8 @@ class FunASRServer:
             total_time = time.time() - start_time
             logger.info(f"标点恢复模型加载完成 - 耗时: {model_time:.2f}秒 / 总: {total_time:.2f}秒")
             return True
-        except Exception as e:
-            logger.error(f"标点恢复模型加载失败: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            logger.error(f"标点恢复模型加载失败: {e!s}")
             return False
 
     def initialize(self):
@@ -216,12 +216,12 @@ class FunASRServer:
                 "message": f"FunASR模型并行初始化成功，耗时: {total_time:.2f}秒",
             }
 
-        except ImportError as e:
+        except ImportError:
             error_msg = "FunASR未安装，请先安装FunASR: pip install funasr"
             logger.error(error_msg)
             return {"success": False, "error": error_msg, "type": "import_error"}
-        except Exception as e:
-            error_msg = f"FunASR模型初始化失败: {str(e)}"
+        except Exception as e:  # noqa: BLE001
+            error_msg = f"FunASR模型初始化失败: {e!s}"
             logger.error(error_msg)
             logger.error(traceback.format_exc())
             return {"success": False, "error": error_msg, "type": "init_error"}
@@ -282,8 +282,8 @@ class FunASRServer:
                         else:
                             final_text = str(punc_result[0])
                     logger.info("FunASR标点恢复完成")
-                except Exception as e:
-                    logger.warning(f"FunASR标点恢复失败，使用原始文本: {str(e)}")
+                except Exception as e:  # noqa: BLE001
+                    logger.warning(f"FunASR标点恢复失败，使用原始文本: {e!s}")
 
             duration = self._record_audio_duration(audio_path)
             self.transcription_count += 1
@@ -309,8 +309,8 @@ class FunASRServer:
             logger.info(f"转录完成，最终文本: {final_text[:100]}...")
             return result
 
-        except Exception as e:
-            error_msg = f"音频转录失败: {str(e)}"
+        except Exception as e:  # noqa: BLE001
+            error_msg = f"音频转录失败: {e!s}"
             logger.error(error_msg)
             logger.error(traceback.format_exc())
             return {"success": False, "error": error_msg, "type": "transcription_error"}
@@ -320,13 +320,11 @@ class FunASRServer:
     def _get_audio_duration(self, audio_path):
         """从 WAV 头读取音频时长（仅解析 RIFF header，不解码整个文件）"""
         try:
-            import struct
             with open(audio_path, "rb") as f:
-                riff, size, wave = struct.unpack("<4sI4s", f.read(12))
+                riff, _size, wave = struct.unpack("<4sI4s", f.read(12))
                 if riff != b"RIFF" or wave != b"WAVE":
                     return 0.0
                 # 遍历 chunk 找到 fmt 和 data
-                fmt_found = False
                 data_size = 0
                 sample_rate = 0
                 channels = 0
@@ -341,7 +339,6 @@ class FunASRServer:
                         audio_format, channels, sample_rate = struct.unpack("<HHI", fmt_data[:8])
                         if audio_format == 1:  # PCM
                             bits_per_sample = struct.unpack("<H", fmt_data[14:16])[0]
-                        fmt_found = True
                     elif chunk_id == b"data":
                         data_size = chunk_size
                         break
@@ -352,7 +349,7 @@ class FunASRServer:
                     duration = total_samples / sample_rate
                     return duration
             return 0.0
-        except Exception:
+        except (struct.error, OSError, ValueError):
             return 0.0
 
     def _record_audio_duration(self, audio_path):
@@ -369,8 +366,8 @@ class FunASRServer:
             import gc
             gc.collect()
             logger.info("内存清理完成")
-        except Exception as e:
-            logger.warning(f"内存清理失败: {str(e)}")
+        except Exception as e:  # noqa: BLE001
+            logger.warning(f"内存清理失败: {e!s}")
 
     def get_performance_stats(self):
         return {
@@ -426,7 +423,6 @@ server: "FunASRServer | None" = None
 @app.route('/health', methods=['GET'])
 def health():
     """存活 / 就绪探针（模型未就绪时返回 503，配合 K8s readiness probe）"""
-    global server
     if server is None or not server.initialized:
         return jsonify({"status": "not_ready"}), 503
     return jsonify({"status": "ok"})
@@ -435,7 +431,6 @@ def health():
 @app.route('/status', methods=['GET'])
 def status():
     """返回 FunASR 安装和模型状态"""
-    global server
     if server is None:
         return jsonify({
             "success": False,
@@ -450,7 +445,6 @@ def status():
 @app.route('/transcribe', methods=['POST'])
 def transcribe():
     """接受 WAV 音频上传（multipart/form-data），返回转录结果"""
-    global server
     if server is None or not server.initialized:
         return jsonify({"success": False, "error": "服务器未初始化，模型未就绪"}), 503
 
@@ -476,14 +470,13 @@ def transcribe():
     finally:
         try:
             os.unlink(tmp_path)
-        except:
+        except OSError:
             pass
 
 
 @app.route('/stats', methods=['GET'])
 def stats():
     """性能统计"""
-    global server
     if server is None:
         return jsonify({"success": False, "error": "服务器未初始化"})
     return jsonify({"success": True, "stats": server.get_performance_stats()})
@@ -492,7 +485,6 @@ def stats():
 @app.route('/cleanup', methods=['POST'])
 def cleanup():
     """触发内存清理"""
-    global server
     if server is not None:
         server._cleanup_memory()
     return jsonify({"success": True, "message": "内存清理完成"})
@@ -560,7 +552,7 @@ def _download_models():
         try:
             snapshot_download(mid, revision=rev, cache_dir=cache_dir)
             results[idx] = True
-        except Exception as e:
+        except Exception as e:  # noqa: BLE001
             logger.error(f"模型下载失败 {mid}: {e}")
             results[idx] = False
 
@@ -617,24 +609,28 @@ init_server()
 # gunicorn 程序化启动封装
 # ---------------------------------------------------------------------------
 
-import gunicorn.app.base as gunicorn_app_base
+_IS_WINDOWS = sys.platform == 'win32'
 
+if _IS_WINDOWS:
+    _GunicornApp = None  # Windows 不支持 gunicorn
+else:
+    import gunicorn.app.base as gunicorn_app_base
 
-class _GunicornApp(gunicorn_app_base.BaseApplication):
-    """将 Flask app 封装为 gunicorn Application，支持程序化传入配置"""
+    class _GunicornApp(gunicorn_app_base.BaseApplication):
+        """将 Flask app 封装为 gunicorn Application，支持程序化传入配置"""
 
-    def __init__(self, flask_app, options=None):
-        self._flask_app = flask_app
-        self._options = options or {}
-        super().__init__()
+        def __init__(self, flask_app, options=None):
+            self._flask_app = flask_app
+            self._options = options or {}
+            super().__init__()
 
-    def load_config(self):
-        for key, value in self._options.items():
-            if key in self.cfg.settings and value is not None:
-                self.cfg.set(key.lower(), value)
+        def load_config(self):
+            for key, value in self._options.items():
+                if key in self.cfg.settings and value is not None:
+                    self.cfg.set(key.lower(), value)
 
-    def load(self):
-        return self._flask_app
+        def load(self):
+            return self._flask_app
 
 
 # ---------------------------------------------------------------------------
@@ -648,9 +644,11 @@ if __name__ == '__main__':
     parser.add_argument('--debug', action='store_true', default=False, help='Flask 调试模式（仅开发使用，会禁用 gunicorn）')
     args = parser.parse_args()
 
-    if args.debug:
+    if _IS_WINDOWS or args.debug:
+        if _IS_WINDOWS and not args.debug:
+            logger.warning("Windows 不支持 gunicorn，使用 Flask 开发服务器（生产环境推荐用 Docker）")
         logger.info(f"启动 Flask 开发服务器 -> {args.host}:{args.port}")
-        app.run(host=args.host, port=args.port, debug=True)
+        app.run(host=args.host, port=args.port, debug=args.debug)
     else:
         workers = int(os.environ.get('FUNASR_WORKERS', '1'))
         threads = int(os.environ.get('FUNASR_THREADS', '8'))
