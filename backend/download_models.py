@@ -3,7 +3,7 @@
 FunASR 模型下载脚本
 并行下载所有模型文件到 MODELSCOPE_CACHE 目录（默认 /models）
 snapshot_download 内置缓存检测，已下载的模型自动跳过
-"""
+"""  # noqa: EXE001
 
 import os
 import sys
@@ -14,9 +14,11 @@ from modelscope.hub.snapshot_download import snapshot_download
 CACHE_DIR = os.environ.get("MODELSCOPE_CACHE")  # Docker 设置 /models，本地 None→使用默认 ~/.cache/modelscope
 
 MODELS = [
-    ("damo/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch", "v2.0.4"),
-    ("damo/speech_fsmn_vad_zh-cn-16k-common-pytorch", "v2.0.4"),
-    ("damo/punc_ct-transformer_zh-cn-common-vocab272727-pytorch", "v2.0.4"),
+    ("iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch", "v2.0.4"),
+    ("iic/speech_fsmn_vad_zh-cn-16k-common-pytorch", "v2.0.4"),
+    ("iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch", "v2.0.4"),
+    ("iic/SenseVoiceSmall", None),
+    ("shuai1618/paraformer-zh-streaming", None),
 ]
 
 
@@ -42,11 +44,11 @@ def main():
     for t in threads:
         t.join()
 
-    names = ["ASR", "VAD", "标点"]
+    names = ["ASR", "VAD", "标点", "SenseVoice", "Streaming"]
     all_ok = True
     for i, (model_id, _) in enumerate(MODELS):
         r = results.get(i)
-        label = names[i]
+        label = names[i] if i < len(names) else f"模型{i}"
         if r and r[0]:
             print(f"  ✓ {label}", flush=True)
         else:

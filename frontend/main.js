@@ -2,6 +2,11 @@ const { app, globalShortcut, BrowserWindow, Menu } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 
+// 静默 Linux GPU VSync 无害警告
+if (process.platform === 'linux') {
+  app.commandLine.appendSwitch('disable-gpu-vsync');
+}
+
 // 启动 ydotoold 守护进程（Wayland 键盘模拟）
 function ensureYdotoolDaemon() {
   if (process.platform !== 'linux') return;

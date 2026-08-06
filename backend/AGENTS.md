@@ -1,60 +1,71 @@
-# AGENTS.md
+# AGENTS.md — 后端开发指南
 
-## 启动后端
+## 启动
 
 ```bash
-# 测试/开发环境（源码运行）
-uv sync                            # 安装 Python 依赖（仅首次）
-uv run python funasr_server.py     # 启动服务，首次自动下载模型 ~1.2GB
+# 开发（源码）
+uv sync
+uv run python server.py
 
-# 生产环境（容器）
-podman compose build               # 构建镜像
-podman compose up -d               # 启动容器
-podman compose down                # 停止容器
-podman logs -f ququ-backend        # 查看日志
+# 生产（容器）
+podman compose up -d --build
+podman compose logs -f backend
 ```
 
-## API 端点
+## API
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
-| `/health` | GET | 健康检查，返回 `{"status":"ok"}` |
-| `/status` | GET | 模型状态（server_ready, models_initialized 等）|
-| `/transcribe` | POST | 上传音频（multipart/form-data `file` 字段），返回 `{"text":"..."}` |
+| `/health` | GET | 健康检查 → `{"status":"ok","asr_loaded":true}` |
+| `/status` | GET | 模型状态 → `{"success":true,"models_initialized":true,"is_initializing":false}` |
+| `/transcribe` | POST | 离线批量转写 (旧版兼容) |
 | `/stats` | GET | 性能统计 |
+| `/cleanup` | POST | 手动 gc |
 
-## 模型自动下载流程
+## WebSocket `/stream/ws`
 
-```
-容器模式:                          源码模式:
-entrypoint.sh                      funasr_server.py 模块加载
-  └─ download_models.py              └─ init_server()
-       └─ snapshot_download (×3)          ├─ _default_damo_root()  探测模型目录
-       └─ sys.exit(1) 若失败              ├─ check_model_files()   检查文件
-  └─ gunicorn funasr_server:app           └─ _download_models()    缺失则自动下载
-       └─ post_worker_init → init_server()
-```
+单连接承载所有双向通信，协议见 `server.py` 注释和 README。
 
-- `snapshot_download` 内置缓存检测，已下载则跳过（幂等）
-- 三个模型并行下载：ASR、VAD、标点恢复
-- 容器模式模型缓存于 `~/.cache/modelscope`（通过 volume 挂载到 `/models`）
+## 模型
 
-## 关键环境变量
+5 个模型，`ASREngine._load_models()` 中加载：
 
-| 变量 | 默认值 | 说明 |
-|------|--------|------|
-| `MODELSCOPE_CACHE` | Docker: `/models`, 源码: `~/.cache/modelscope` | 模型缓存根目录 |
-| `DAMO_ROOT` | 由 `_default_damo_root()` 自动探测 | damo 模型实际路径 |
-| `OMP_NUM_THREADS` | `4` | PyTorch 并行线程数 |
+| 模型 | ModelScope ID | 用途 |
+|------|-------------|------|
+| online | `shuai1618/paraformer-zh-streaming` | 流式实时解码 |
+| offline | `iic/SenseVoiceSmall` | 离线纠正 (中英混合 + ITN) |
+| fallback | `iic/speech_paraformer-large_asr_nat-zh-cn-16k-common-vocab8404-pytorch` | 离线 fallback |
+| VAD | `iic/speech_fsmn_vad_zh-cn-16k-common-pytorch` | 语音活动检测 |
+| punc | `iic/punc_ct-transformer_zh-cn-common-vocab272727-pytorch` | 标点恢复 |
 
-## gunicorn 配置
-
-- 1 worker / 4 threads / timeout 300s / graceful-timeout 30s
-- `post_worker_init` 钩子触发 `init_server()` 确保 worker 启动时模型已就绪
-- 绑定 `0.0.0.0:8000`，通过 Flask-CORS 允许跨域
+模型通过 lifespan 后台预加载，首次 WebSocket 连接时已就绪。
 
 ## 代码结构
 
-- `funasr_server.py` — Flask 应用 + FunASR 模型封装 (FunASRServer 类) + 模型下载逻辑。**注意**：模型初始化用多线程并行加载，`suppress_stdout()` 上下文管理器操作全局 `sys.stdout`；`initialize()` 结束时强制恢复 `sys.stdout` 防止竞态破坏
-- `download_models.py` — 独立的模型下载脚本（容器入口使用）
-- `entrypoint.sh` — 容器启动脚本，先下载模型再启动 gunicorn（`set -e`，任一步失败则退出）
+| 文件 | 职责 |
+|------|------|
+| `server.py` | FastAPI 入口 (REST + WS)，全局引擎/Pipeline/LLM 管理，广播，热词监控 |
+| `asr_engine.py` | `ASREngine` — 5 模型统一引擎，流式+离线+后台循环+generation stamp+音频裁剪 |
+| `pipeline.py` | `CandidateBuffer` (三区管道) + `PTTPipeline` — 绿区提交、LLM 润色、终审 |
+| `llm_optimizer.py` | `LLMOptimizer` — 流式 OpenAI 兼容 API，关思考梯子，上下文 prompt |
+| `download_models.py` | `snapshot_download` 预下载 5 模型，`python server.py` 启动时自动调用 |
+| `test_phase1.py` | 集成测试 (引擎/管道/WS/nginx)，`uv run python test_phase1.py` |
+
+## 环境变量
+
+| 变量 | 默认 | 说明 |
+|------|------|------|
+| `FUNASR_HOST` | `0.0.0.0` | 绑定地址 |
+| `FUNASR_PORT` | `8000` | 端口 |
+| `FUNASR_DEVICE` | `cpu` | 设备 (auto/cpu/cuda/mps) |
+| `OMP_NUM_THREADS` | `4` | PyTorch 并行线程数 |
+| `MODELSCOPE_CACHE` | Docker: `/models` | 模型缓存目录 |
+
+## 测试与 Lint
+
+```bash
+uv run python test_phase1.py              # 集成测试
+uv run --with ruff ruff check *.py        # lint
+uv run --with ruff ruff check --fix *.py  # auto-fix
+uv run --with basedpyright basedpyright *.py  # type check
+```

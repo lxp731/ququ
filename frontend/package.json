@@ -1,6 +1,6 @@
 {
   "name": "ququ",
-  "version": "1.1.10",
+  "version": "1.2.0",
   "description": "蛐蛐 - 基于FunASR和AI的中文语音转文字应用",
   "main": "main.js",
   "private": true,
@@ -17,6 +17,7 @@
     "build:mac": "electron-builder --mac",
     "test": "vitest run",
     "test:watch": "vitest",
+    "lint": "eslint \"src/**/*.{js,jsx}\"",
     "postinstall": "electron-builder install-app-deps",
     "preview": "vite preview"
   },
@@ -34,6 +35,7 @@
   },
   "license": "MIT",
   "devDependencies": {
+    "@eslint/js": "^10.0.1",
     "@tailwindcss/vite": "^4.1.10",
     "@testing-library/jest-dom": "^7.0.0",
     "@testing-library/react": "^16.3.2",
@@ -43,6 +45,10 @@
     "cross-env": "^10.0.0",
     "electron": "36.5.0",
     "electron-builder": "^24.6.4",
+    "eslint": "^10.8.0",
+    "eslint-plugin-react": "^7.37.5",
+    "eslint-plugin-react-hooks": "^7.1.1",
+    "globals": "^17.9.0",
     "jsdom": "^29.1.1",
     "tailwindcss": "^4.1.10",
     "vite": "^6.3.5",
@@ -112,12 +118,35 @@
           "arch": [
             "x64"
           ]
+        },
+        {
+          "target": "rpm",
+          "arch": [
+            "x64"
+          ]
         }
       ],
       "artifactName": "ququ-v${version}.${ext}",
       "maintainer": "yan5xu <lueco.x@gmail.com>",
       "synopsis": "蛐蛐 - 中文语音输入工具",
       "description": "开源免费的 Wispr Flow 替代方案，基于 FunASR 本地语音识别和可配置 AI 模型的语音转文字桌面应用。"
+    },
+    "rpm": {
+      "depends": [
+        "gtk3",
+        "nss",
+        "alsa-lib",
+        "libX11",
+        "libXcomposite",
+        "libXdamage",
+        "libXext",
+        "libXfixes",
+        "libXrandr",
+        "mesa-libgbm",
+        "pango",
+        "cairo",
+        "libdrm"
+      ]
     },
     "deb": {
       "depends": [

@@ -114,6 +114,9 @@ export function mockElectronAPI(overrides = {}) {
     segmentChinese: vi.fn().mockResolvedValue({ segments: [] }),
     addPunctuation: vi.fn().mockResolvedValue({ text: '' }),
 
+    // ── 热词 ──
+    selectHotwordFile: vi.fn().mockResolvedValue({ canceled: true }),
+
     // ── 音频 ──
     convertAudioFormat: vi.fn().mockResolvedValue({ success: true }),
     enhanceAudio: vi.fn().mockResolvedValue({ success: true }),

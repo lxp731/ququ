@@ -1,4 +1,5 @@
-const { ipcMain, app, shell, BrowserWindow } = require('electron');
+const { ipcMain, app, shell, BrowserWindow, dialog } = require('electron');
+const fs = require('fs');
 
 class IPCHandlers {
   constructor({ databaseManager, clipboardManager, funasrManager, windowManager, hotkeyManager, keyWatcher, logger }) {
@@ -46,8 +47,30 @@ class IPCHandlers {
     ipcMain.handle('check-model-files', () => this.funasr.checkModelFiles());
     ipcMain.handle('get-download-progress', () => this.funasr.getDownloadProgress());
     ipcMain.handle('restart-funasr-server', () => this.funasr.restartServer());
-    ipcMain.handle('download-model', async (event) => this.funasr.restartServer());
+    ipcMain.handle('download-model', async () => this.funasr.restartServer());
     ipcMain.handle('start-local-backend', async () => this.funasr.startLocalBackend());
+    ipcMain.handle('notify-settings-update', (_e, data) => {
+      if (this.wm.settingsWindow && !this.wm.settingsWindow.isDestroyed()) {
+        this.wm.settingsWindow.webContents.send('settings-update', data);
+      }
+    });
+
+    // ── 热词文件选择 ──
+    ipcMain.handle('select-hotword-file', async () => {
+      const result = await dialog.showOpenDialog({
+        title: '选择热词文件',
+        filters: [{ name: '文本文件', extensions: ['txt'] }],
+        properties: ['openFile'],
+      });
+      if (result.canceled || !result.filePaths.length) return { canceled: true };
+      try {
+        const content = fs.readFileSync(result.filePaths[0], 'utf-8');
+        const words = content.split('\n').map(w => w.trim()).filter(Boolean);
+        return { path: result.filePaths[0], words, count: words.length };
+      } catch (e) {
+        return { error: e.message };
+      }
+    });
 
     // ── AI 文本处理 ──
     ipcMain.handle('process-text', async (_, text, mode = 'optimize') => this._processWithAI(text, mode));
@@ -188,9 +211,9 @@ class IPCHandlers {
     ipcMain.handle('clear-performance-stats', () => ({ success: true }));
 
     // ── 中文相关 ──
-    ipcMain.handle('detect-language', (_, text) => ({ language: 'zh-CN', confidence: 0.95 }));
-    ipcMain.handle('segment-chinese', (_, text) => ({ segments: [...text] }));
-    ipcMain.handle('add-punctuation', (_, text) => ({ text }));
+    ipcMain.handle('detect-language', () => ({ language: 'zh-CN', confidence: 0.95 }));
+    ipcMain.handle('segment-chinese', (_, _text) => ({ segments: [..._text] }));
+    ipcMain.handle('add-punctuation', (_, _text) => ({ text: _text }));
 
     // ── 音频 ──
     ipcMain.handle('convert-audio-format', (_, data) => ({ success: true, data }));

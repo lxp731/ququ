@@ -48,7 +48,7 @@ class KeyWatcher {
           devices.add(fs.realpathSync(path.join(byPath, name)));
         }
       }
-    } catch (_) {}
+    } catch (_) { /* ignore */ }
     return [...devices];
   }
 
@@ -231,7 +231,7 @@ while ($true) {
 
   stop() {
     if (this._child) {
-      try { this._child.kill('SIGTERM'); } catch (_) {}
+      try { this._child.kill('SIGTERM'); } catch (_) { /* ignore */ }
       this._child = null;
     }
     this._onKeyEvent = null;

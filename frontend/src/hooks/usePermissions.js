@@ -9,7 +9,7 @@ export const usePermissions = (showAlert) => {
       await navigator.mediaDevices.getUserMedia({ audio: true });
       setMicGranted(true);
       showAlert?.({ title: '✅ 麦克风权限正常', description: '可以开始语音录制了。' });
-    } catch (err) {
+    } catch {
       setMicGranted(false);
       showAlert?.({ title: '❌ 需要麦克风权限', description: '请授予麦克风权限以使用语音转录功能。' });
     }
@@ -20,7 +20,7 @@ export const usePermissions = (showAlert) => {
       await window.electronAPI?.pasteText('蛐蛐权限测试');
       setA11yGranted(true);
       showAlert?.({ title: '✅ 辅助功能权限正常', description: '自动粘贴功能正常工作。' });
-    } catch (err) {
+    } catch {
       setA11yGranted(false);
       showAlert?.({ title: '❌ 需要辅助功能权限', description: '请在系统设置中授予权限以启用自动粘贴。' });
     }

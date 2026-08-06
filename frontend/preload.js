@@ -79,6 +79,9 @@ contextBridge.exposeInMainWorld('electronAPI', {
   log: (level, msg) => ipcRenderer.invoke('log', level, msg),
   getDebugInfo: () => ipcRenderer.invoke('get-debug-info'),
 
+  // 热词
+  selectHotwordFile: () => ipcRenderer.invoke('select-hotword-file'),
+
   // 模型 & 后端
   downloadModel: (name) => ipcRenderer.invoke('download-model', name),
   startLocalBackend: () => ipcRenderer.invoke('start-local-backend'),
@@ -91,6 +94,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   onTranscriptionUpdate: (cb) => on('transcription-update', cb),
   onProcessingUpdate: (cb) => on('processing-update', cb),
   onError: (cb) => on('error', cb),
+  notifySettingsUpdate: (data) => ipcRenderer.invoke('notify-settings-update', data),
   onSettingsUpdate: (cb) => on('settings-update', cb),
 
   // 其他窗口

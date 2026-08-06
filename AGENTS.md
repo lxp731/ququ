@@ -1,6 +1,6 @@
 # AGENTS.md
 
-本文档记录项目架构和技术栈速查。完整的行为规约见项目根目录`./CLAUDE.md`文件。
+本文档记录项目架构和技术栈速查。完整的行为规约见项目根目录 `./CLAUDE.md` 文件。
 
 ## 项目架构
 
@@ -10,18 +10,36 @@ ququ/
 │   ├── main.js            # Electron 主进程入口
 │   ├── preload.js         # IPC 桥接 (contextBridge)
 │   ├── src/
-│   │   ├── App.jsx         # 主页面（录音、状态管理）
-│   │   ├── settings.jsx    # 设置页面
+│   │   ├── App.jsx         # 主页面（录音、三区文字、状态管理）
+│   │   ├── settings.jsx    # 设置页面（后端地址、AI 配置、热词文件）
 │   │   ├── history.jsx     # 转录历史
 │   │   ├── helpers/        # Electron 主进程模块
-│   │   └── hooks/          # React hooks（渲染进程）
+│   │   │   ├── ipcHandlers.js   # 所有 ipcMain.handle 注册
+│   │   │   ├── funasrManager.js # 后端连接生命周期
+│   │   │   ├── clipboard.js     # 跨平台粘贴 (ydotool/wtype/osascript)
+│   │   │   ├── keyWatcher.js    # 长按全局按键监听 (evdev)
+│   │   │   ├── hotkeyManager.js # 快捷键注册
+│   │   │   ├── database.js      # better-sqlite3 存取
+│   │   │   └── ...
+│   │   ├── hooks/          # React hooks
+│   │   │   ├── useStreamingRecording.js # 流式录音 (WS + mic)
+│   │   │   ├── streamingSession.js     # WebSocket 客户端 (心跳/重连)
+│   │   │   ├── useModelStatus.js       # 后端/模型状态机
+│   │   │   ├── useHotkey.js            # 快捷键
+│   │   │   └── usePermissions.js       # 麦克风/辅助功能权限
+│   │   └── index.css       # Tailwind 4 + 自定义主题
 │   └── assets/             # 图标等资源
-├── backend/               # Python FunASR HTTP 服务
-│   ├── funasr_server.py   # Flask REST API
-│   ├── download_models.py # 模型下载脚本
-│   ├── entrypoint.sh      # 容器入口（下载→启动）
+├── backend/               # Python FastAPI 服务
+│   ├── server.py          # FastAPI 入口 (REST + WebSocket)
+│   ├── asr_engine.py      # ASR 引擎 (流式 + 离线 + VAD + 标点)
+│   ├── pipeline.py        # 三区 Pipeline (CandidateBuffer + PTTPipeline)
+│   ├── llm_optimizer.py   # LLM 校对 (OpenAI 兼容流式 API)
+│   ├── download_models.py # 模型预下载脚本
+│   ├── entrypoint.sh      # 容器入口（下载 → 启动）
+│   ├── test_phase1.py     # 集成测试
 │   ├── Dockerfile
 │   └── pyproject.toml     # uv 依赖管理
+├── nginx.conf             # 反向代理 (WS + HTTP 分流)
 └── docker-compose.yml     # Podman/Docker 编排
 ```
 
@@ -31,19 +49,65 @@ ququ/
 |------|------|
 | 桌面框架 | Electron 36 |
 | 前端 | React 19, Vite 6, Tailwind CSS 4 |
-| UI | Radix UI（无头组件）, Framer Motion（动画）, Lucide（图标）, sonner（toast）|
-| 语音识别 | FunASR (Paraformer-large, FSMN-VAD, CT-Transformer) |
-| AI 文本优化 | 兼容 OpenAI API（通义千问、Kimi、智谱等）|
-| 后端框架 | Flask + gunicorn |
+| UI | Radix UI, Framer Motion, Lucide, sonner |
+| 语音识别 | FunASR (paraformer-zh-streaming + SenseVoiceSmall + paraformer-large + VAD + CT-Transformer) |
+| AI 校对 | 兼容 OpenAI API 的 LLM（DeepSeek, Qwen, GPT 等），流式 chat/completions |
+| 后端框架 | FastAPI + uvicorn (REST + WebSocket 单进程) |
 | 数据库 | better-sqlite3（key-value 模式，JSON 序列化存取）|
+| Lint | Ruff + basedpyright (Python), ESLint (JS/JSX) |
+| 测试 | pytest-asyncio + websockets (Python), vitest (JS) |
 | 包管理 | pnpm (Node), uv (Python) |
 | 容器化 | Podman / Docker Compose |
 
+## 架构设计
+
+### 语音识别流程
+
+```
+麦克风 → getUserMedia → ScriptProcessor → Int16 PCM → WebSocket
+  → server.py → ASREngine (流式 paraformer-zh-streaming)
+  → PTTPipeline (三区管道)
+  → 流式模型中间结果 → 离线 SenseVoiceSmall 周期纠正
+  → LLM 绿区校对 → 逐句上屏
+```
+
+### 三区管道 (来自 YuHuang)
+
+- **红区** (0~10 字): 流式草稿，随时被改写
+- **黄区** (10~30 字): 离线修正射程内，等待确认
+- **绿区** (30+ 字): 已稳定，送 LLM 校对后逐句提交
+
+### WebSocket 协议
+
+| 方向 | 消息 | 说明 |
+|------|------|------|
+| Client → Server | `start_listening` | PTT 开始 |
+| Client → Server | `stop_listening` | PTT 结束 |
+| Client → Server | `config` | LLM + 热词配置 |
+| Client → Server | `ping` | 心跳 |
+| Client → Server | binary | PCM 音频块 (int16, 16kHz, mono) |
+| Server → Client | `preedit` | 三区文字 `{green, yellow, red}` |
+| Server → Client | `commit` | 已提交文字 |
+| Server → Client | `final` | 最终转写结果 |
+| Server → Client | `hotwords_updated` | 热词文件重载通知 |
+
+### API 端点
+
+| 端点 | 方法 | 说明 |
+|------|------|------|
+| `/health` | GET | 健康检查 |
+| `/status` | GET | 模型状态 (兼容旧 API) |
+| `/transcribe` | POST | 离线批量转写 (旧版兼容) |
+| `/stream/ws` | WS | 流式识别 + PTT 控制 |
+
 ## 关键设计决策
 
-- **跨平台支持**：Windows / Linux 双平台。Windows 打包为免安装 portable exe
-- **前后端分离**：Electron 桌面端 ↔ Flask HTTP 服务。后端绑定 `0.0.0.0:8000`（接受所有 IP），前端默认连接 `127.0.0.1:8000`，可在设置中改为远程地址
-- **后端双启动模式**：源码 `uv run python funasr_server.py` / 容器 `podman compose up -d`
-- **模型自动下载**：首次启动自动从 ModelScope 下载 ~1.2GB，`snapshot_download` 幂等，已缓存则跳过
-- **设置持久化**：`better-sqlite3` 存于用户数据目录，key-value 模式，存时 `JSON.stringify`，取时 `JSON.parse`
-- **长按录音**：KeyWatcher 跨平台实现 — Linux 用 evdev (Python) 监听全部键盘设备（`select` 多路复用），Windows 用 GetAsyncKeyState (PowerShell + C# P/Invoke)，macOS 暂不支持（前端自动回退到切换模式）
+- **前后端分离**：Electron 桌面端 ↔ FastAPI 后端。后端绑定 `0.0.0.0:8000`，前端通过 WebSocket 直连
+- **持久 WS 连接**：前端启动时建立，不随录音启停。支持心跳 (15s)、自动重连 (指数退避, 最多 5 次)
+- **后端单进程**：FastAPI + uvicorn，REST + WebSocket 同端口，替代旧 Flask + gunicorn 双进程架构
+- **双启动模式**：源码 `cd backend && uv run python server.py` / 容器 `podman compose up -d`
+- **模型懒加载**：lifespan 后台预加载，首次 WebSocket 连接时已就绪
+- **GPU 自动检测**：cuda → mps → cpu 逐级 fallback，`FUNASR_DEVICE` 环境变量覆盖
+- **热词文件监控**：os.stat 轮询 mtime (2s)，变化自动重载并广播通知前端
+- **长按录音**：Linux evdev / Windows GetAsyncKeyState / macOS 回退切换模式
+- **设置持久化**：SQLite 存于用户数据目录，key-value 模式

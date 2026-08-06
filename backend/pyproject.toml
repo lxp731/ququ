@@ -1,14 +1,14 @@
 [project]
 name = "ququ-backend"
-version = "0.1.0"
-description = "QuQu FunASR 后端服务"
+version = "0.2.0"
+description = "QuQu 统一语音输入后端 (FastAPI + streaming + pipeline)"
 requires-python = ">=3.11"
 dependencies = [
-    "flask>=3.0",
-    "flask-cors>=4.0",
+    "fastapi>=0.115.0",
+    "uvicorn[standard]>=0.30.0",
+    "python-multipart>=0.0.9",
     "funasr>=1.2.7",
-    "gunicorn>=22.0",
-    "librosa>=0.11.0",
+    "httpx>=0.27.0",
     "numpy>=1.26",
     "torch>=2.13.0",
     "torchaudio>=2.11.0",
@@ -22,3 +22,11 @@ extra-index-url = ["https://download.pytorch.org/whl/cpu"]
 dev = [
     "ruff>=0.16.0",
 ]
+
+[tool.basedpyright]
+typeCheckingMode = "standard"
+reportMissingTypeStubs = false
+reportUnknownMemberType = false
+reportUnknownVariableType = false
+reportUnknownParameterType = false
+reportUnknownArgumentType = false

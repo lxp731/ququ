@@ -15,14 +15,14 @@ class LogManager {
     this.logDir = path.join(dataDir, 'logs');
     this.logFile = path.join(this.logDir, 'app.log');
     this.funasrLogFile = path.join(this.logDir, 'funasr.log');
-    try { fs.mkdirSync(this.logDir, { recursive: true }); } catch (_) {}
+    try { fs.mkdirSync(this.logDir, { recursive: true }); } catch (_) { /* ignore */ }
   }
 
   _write(level, message, data = null, file = null) {
     const entry = { timestamp: new Date().toISOString(), level, message, data, pid: process.pid };
     const line = JSON.stringify(entry) + '\n';
     console[level](`[${entry.timestamp}] ${message}`, data ?? '');
-    try { fs.appendFileSync(file || this.logFile, line); } catch (_) {}
+    try { fs.appendFileSync(file || this.logFile, line); } catch (_) { /* ignore */ }
   }
 
   info(msg, data) { this._write('info', msg, data); }

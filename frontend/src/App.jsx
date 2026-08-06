@@ -1,16 +1,16 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-import { Mic, Settings, History, Copy, Sparkles, Keyboard, Timer } from 'lucide-react';
+import { Mic, Settings, History, Copy, Sparkles, Keyboard, Timer, Type } from 'lucide-react';
 import './index.css';
 import { useHotkey } from './hooks/useHotkey';
-import { useRecording } from './hooks/useRecording';
+import { useStreamingRecording } from './hooks/useStreamingRecording';
 import { useModelStatus } from './hooks/useModelStatus';
 
 // ═══════════════════════════════════════════
 //  Subtle animated background dots
 // ═══════════════════════════════════════════
-const dots = Array.from({ length: 20 }, (_, i) => ({
+const dots = Array.from({ length: 20 }, (_) => ({
   left: Math.random() * 100,
   top: Math.random() * 100,
   duration: 2 + Math.random() * 3,
@@ -39,6 +39,10 @@ const BgDots = () => (
 // ═══════════════════════════════════════════
 const waveColors = { indigo: '#818cf8', violet: '#a78bfa' };
 
+// 预生成波形动画随机值，避免 render 中调用 Math.random()
+const _waveHeights = Array.from({ length: 16 }, () => Math.random() * 24 + 4);
+const _waveDurations = Array.from({ length: 16 }, () => 0.6 + Math.random() * 0.4);
+
 const Waveform = ({ active, color = 'indigo' }) => (
   <div className="flex items-center justify-center gap-0.5 h-8">
     {[...Array(16)].map((_, i) => (
@@ -47,11 +51,11 @@ const Waveform = ({ active, color = 'indigo' }) => (
         className="w-0.5 rounded-full"
         style={{ backgroundColor: waveColors[color] || waveColors.indigo }}
         animate={active ? {
-          height: [4, Math.random() * 24 + 4, 4],
+          height: [4, _waveHeights[i], 4],
           opacity: [0.4, 1, 0.4],
         } : { height: 4, opacity: 0.3 }}
         transition={active ? {
-          duration: 0.6 + Math.random() * 0.4,
+          duration: _waveDurations[i],
           repeat: Infinity,
           delay: i * 0.05,
           ease: 'easeInOut',
@@ -90,7 +94,7 @@ const MicButton = ({ state, onClick, disabled }) => {
             ? 'border-indigo-400/50 bg-indigo-500/20 recording-glow'
             : isProcessing
               ? 'border-white/10 bg-white/5 cursor-wait'
-              : 'border-white/10 bg-white/[0.06] hover:bg-white/[0.12] hover:border-white/20'
+              : 'border-white/10 bg-white/6 hover:bg-white/12 hover:border-white/20'
           }
           ${isDisabled && !isProcessing ? 'opacity-40 cursor-not-allowed' : ''}
         `}
@@ -100,7 +104,7 @@ const MicButton = ({ state, onClick, disabled }) => {
       >
         {/* Inner icon area */}
         <div className={`w-14 h-14 rounded-full flex items-center justify-center transition-all duration-500
-          ${isRecording ? 'bg-indigo-500/20' : 'bg-white/[0.04]'}`}
+          ${isRecording ? 'bg-indigo-500/20' : 'bg-white/4'}`}
         >
           {isProcessing ? (
             <motion.div
@@ -161,9 +165,55 @@ const Tooltip = ({ children, content, position = "top" }) => {
 };
 
 // ═══════════════════════════════════════════
+//  Three-Zone Streaming Text Panel
+// ═══════════════════════════════════════════
+const StreamingTextPanel = ({ green, yellow, red, isActive }) => {
+  const hasContent = green || yellow || red;
+  if (!hasContent && !isActive) return null;
+  return (
+    <motion.div
+      initial={{ opacity: 0, y: 10 }}
+      animate={{ opacity: 1, y: 0 }}
+      className="glass-light p-4 border-indigo-400/10"
+    >
+      <div className="flex items-center justify-between mb-2">
+        <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-indigo-300/50">
+          <Type className="w-3 h-3" /> 实时识别
+          {isActive && (
+            <motion.span
+              className="inline-block w-1.5 h-1.5 rounded-full bg-indigo-400"
+              animate={{ opacity: [1, 0.3, 1] }}
+              transition={{ duration: 0.8, repeat: Infinity }}
+            />
+          )}
+        </span>
+      </div>
+      <p className="text-base leading-relaxed">
+        {hasContent ? (
+          <>
+            {green && <span className="text-white/90">{green}</span>}
+            {yellow && <span className="text-white/60">{yellow}</span>}
+            {red && <span className="text-white/30">{red}</span>}
+          </>
+        ) : (
+          <span className="text-white/25 italic">正在聆听...</span>
+        )}
+        {isActive && (
+          <motion.span
+            className="inline-block w-0.5 h-5 bg-indigo-400 ml-0.5 align-text-bottom"
+            animate={{ opacity: [1, 0] }}
+            transition={{ duration: 0.5, repeat: Infinity, repeatType: 'reverse' }}
+          />
+        )}
+      </p>
+    </motion.div>
+  );
+};
+
+// ═══════════════════════════════════════════
 //  Text Display Panel
 // ═══════════════════════════════════════════
-const TextPanel = ({ original, processed, isOptimizing, onCopy, onPaste }) => {
+const TextPanel = ({ original, processed, isOptimizing, onCopy }) => {
   if (!original && !processed) return null;
   return (
     <motion.div
@@ -223,22 +273,32 @@ const TextPanel = ({ original, processed, isOptimizing, onCopy, onPaste }) => {
 // ═══════════════════════════════════════════
 //  MAIN APP
 // ═══════════════════════════════════════════
+const SettingsPage = React.lazy(() => import('./settings.jsx'));
+
 export default function App() {
   const urlParams = new URLSearchParams(window.location.search);
-  const isSettings = urlParams.get('page') === 'settings';
-
-  if (isSettings) {
-    const SettingsPage = React.lazy(() => import('./settings.jsx'));
+  if (urlParams.get('page') === 'settings') {
     return (
-      <React.Suspense fallback={<div className="min-h-screen animated-bg flex items-center justify-center"><div className="w-6 h-6 border-2 border-indigo-400/60 border-t-transparent rounded-full animate-spin" /></div>}>
+      <React.Suspense fallback={<LoadingSpinner />}>
         <SettingsPage />
       </React.Suspense>
     );
   }
+  return <MainApp />;
+}
+
+function LoadingSpinner() {
+  return (
+    <div className="min-h-screen animated-bg flex items-center justify-center">
+      <div className="w-6 h-6 border-2 border-indigo-400/60 border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
+
+function MainApp() {
 
   const [originalText, setOriginalText] = useState('');
   const [processedText, setProcessedText] = useState('');
-  const [isOptimizing, setIsOptimizing] = useState(false);
   const [isHovered, setIsHovered] = useState(false);
   const [recordingMode, setRecordingMode] = useState('toggle');
   const [isCapturingHotkey, setIsCapturingHotkey] = useState(false);
@@ -247,8 +307,29 @@ export default function App() {
   const [isPackaged, setIsPackaged] = useState(false);
 
   const modelStatus = useModelStatus();
-  const { isRecording, isProcessing: isRecProcessing, startRecording, stopRecording } = useRecording(modelStatus);
+
+  // 流式录音 (PTT → WebSocket → Python pipeline)
+  const streamingRec = useStreamingRecording();
+
+  const isRecordingActual = streamingRec.isRecording;
+  const isRecProcessingActual = streamingRec.isProcessing;
+  const isOptimizing = streamingRec.isOptimizing;
+  const streamingError = streamingRec.error;
+
+  // 三区文字 (来自后端 preedit 广播)
+  const [preeditGreen, setPreeditGreen] = useState('');
+  const [preeditYellow, setPreeditYellow] = useState('');
+  const [preeditRed, setPreeditRed] = useState('');
+
+  const startRecording = useCallback(() => streamingRec.startRecording(), [streamingRec]);
+  const stopRecording = useCallback(() => streamingRec.stopRecording(), [streamingRec]);
+
   const { hotkey, rawHotkey, registerHotkey, unregisterHotkey, syncRecordingState } = useHotkey();
+
+  // Sync recording state
+  useEffect(() => {
+    syncRecordingState?.(streamingRec.isRecording);
+  }, [streamingRec.isRecording, syncRecordingState]);
 
   const lastPasteRef = useRef({ text: '', ts: 0 });
 
@@ -272,53 +353,84 @@ export default function App() {
         await navigator.clipboard.writeText(text);
         toast.info('已复制到剪贴板');
       }
-    } catch (e) {
+    } catch {
       toast.error('粘贴失败，请手动粘贴');
     }
   }, []);
 
-  // Recording complete callback
-  const handleRecordingComplete = useCallback(async (result) => {
-    if (!result?.success || !result.text) return;
-    setOriginalText(result.text);
+  // ── Pipeline callbacks (wire from useStreamingRecording) ──
+  const handleStreamingText = useCallback((_fullText) => {
+    setOriginalText(_fullText);
     setProcessedText('');
-    setIsOptimizing(true);
+    setPreeditGreen('');
+    setPreeditYellow('');
+    setPreeditRed('');
   }, []);
 
-  // AI optimization complete callback
-  const handleAIOptimizationComplete = useCallback(async (result) => {
-    setIsOptimizing(false);
-    if (result?.enhanced_by_ai) {
-      // AI 实际优化过的文本，显示在优化区块
-      setProcessedText(result.text);
-      await safePaste(result.text);
-      toast.success('AI 优化完成，已自动粘贴');
-    } else {
-      // AI 未启用或优化失败，只粘贴原始文本，不显示 AI 优化区块
-      setProcessedText('');
-      if (originalText) {
-        await safePaste(originalText);
-      }
-    }
-  }, [safePaste, originalText]);
+  const handlePreedit = useCallback(({ green, yellow, red }) => {
+    setPreeditGreen(green || '');
+    setPreeditYellow(yellow || '');
+    setPreeditRed(red || '');
+  }, []);
 
-  // Register callbacks on window
+  const handleCommit = useCallback(async (text) => {
+    setOriginalText(text);
+    setProcessedText('');
+    await safePaste(text);
+  }, [safePaste]);
+
+  const handleFinal = useCallback(async (text) => {
+    setOriginalText(text);
+    setProcessedText('');
+    setPreeditGreen('');
+    setPreeditYellow('');
+    setPreeditRed('');
+    await safePaste(text);
+  }, [safePaste]);
+
+  const handleHotwordsUpdated = useCallback(async (count) => {
+    try {
+      await window.electronAPI?.saveSetting('hotwords_count', count);
+      await window.electronAPI?.notifySettingsUpdate?.({ hotwords_count: count });
+    } catch (_) { /* ignore */ }
+    toast.success(`热词文件已更新 (${count} 词)`);
+  }, []);
+
+  // Wire callbacks to streaming hook
   useEffect(() => {
-    window.onTranscriptionComplete = handleRecordingComplete;
-    window.onAIOptimizationComplete = handleAIOptimizationComplete;
-    return () => { window.onTranscriptionComplete = null; window.onAIOptimizationComplete = null; };
-  }, [handleRecordingComplete, handleAIOptimizationComplete]);
+    // eslint-disable-next-line react-hooks/immutability -- _callbacks is a setter by design
+    streamingRec._callbacks = {
+      onText: handleStreamingText,
+      onPreedit: handlePreedit,
+      onCommit: handleCommit,
+      onFinal: handleFinal,
+      onHotwordsUpdated: handleHotwordsUpdated,
+    };
+  }, [streamingRec, handleStreamingText, handlePreedit, handleCommit, handleFinal, handleHotwordsUpdated]);
 
-  // Toggle recording
+  // Toggle recording (must be before useEffect that references it)
   const toggleRecording = useCallback(() => {
     if (!modelStatus.isReady) {
-      const msgs = { need_backend: '请先启动后端服务', connecting: '正在连接后端...', need_download: '请先下载 AI 模型', downloading: '模型下载中...', loading: '模型加载中...', error: `模型错误: ${modelStatus.error}` };
+      const msgs = {
+        need_backend: '请先启动后端服务', connecting: '正在连接后端...',
+        need_download: '请先下载 AI 模型', downloading: '模型下载中...',
+        loading: '模型加载中...', error: `模型错误: ${modelStatus.error}`
+      };
       toast.warning(msgs[modelStatus.stage] || '模型未就绪');
       return;
     }
-    if (!isRecording && !isRecProcessing) startRecording();
-    else if (isRecording) stopRecording();
-  }, [modelStatus, isRecording, isRecProcessing, startRecording, stopRecording]);
+    if (!isRecordingActual && !isRecProcessingActual) startRecording();
+    else if (isRecordingActual) stopRecording();
+  }, [modelStatus, isRecordingActual, isRecProcessingActual, startRecording, stopRecording]);
+
+  // ── Global hotkey handler ──
+  useEffect(() => {
+    if (recordingMode === 'hold') return;
+    const handler = () => toggleRecording();
+    const u1 = window.electronAPI?.onHotkeyTriggered(handler);
+    const u2 = window.electronAPI?.onToggleDictation(handler);
+    return () => { u1?.(); u2?.(); };
+  }, [toggleRecording, recordingMode]);
 
   // Hotkey capture
   useEffect(() => {
@@ -350,12 +462,14 @@ export default function App() {
   }, [isCapturingHotkey, rawHotkey, registerHotkey, unregisterHotkey]);
 
   // 用 ref 避免闭包过期
-  const isRecordingRef = useRef(isRecording);
-  isRecordingRef.current = isRecording;
+  const isRecordingRef = useRef(isRecordingActual);
+  const isRecProcessingRef = useRef(isRecProcessingActual);
   const startRef = useRef(startRecording);
-  startRef.current = startRecording;
   const stopRef = useRef(stopRecording);
-  stopRef.current = stopRecording;
+  useEffect(() => { isRecordingRef.current = isRecordingActual; });
+  useEffect(() => { isRecProcessingRef.current = isRecProcessingActual; });
+  useEffect(() => { startRef.current = startRecording; });
+  useEffect(() => { stopRef.current = stopRecording; });
 
   // Hold mode: KeyWatcher (evdev) 全局监听
   const heldKeys = useRef(new Set());
@@ -395,30 +509,18 @@ export default function App() {
       heldKeys.current.delete(key);
     });
 
+    const keys = heldKeys.current;
     return () => {
       u1?.(); u2?.();
-      heldKeys.current.clear();
+      keys.clear();
       window.electronAPI?.stopHoldWatch();
     };
   }, [recordingMode, rawHotkey]);
 
-  // isRecProcessing ref（避免闭包问题）
-  const isRecProcessingRef = useRef(isRecProcessing);
-  isRecProcessingRef.current = isRecProcessing;
-
-  // 全局快捷键: 仅切换模式使用；长按模式由 KeyWatcher 接管
-  useEffect(() => {
-    if (recordingMode === 'hold') return;
-    const handler = () => toggleRecording();
-    const u1 = window.electronAPI?.onHotkeyTriggered(handler);
-    const u2 = window.electronAPI?.onToggleDictation(handler);
-    return () => { u1?.(); u2?.(); };
-  }, [toggleRecording, recordingMode]);
-
   // Sync recording state to main process
-  useEffect(() => { syncRecordingState?.(isRecording); }, [isRecording, syncRecordingState]);
+  useEffect(() => { syncRecordingState?.(isRecordingActual); }, [isRecordingActual, syncRecordingState]);
 
-  const micState = isRecording ? 'recording' : (isRecProcessing || isOptimizing) ? 'processing' : isHovered ? 'hover' : 'idle';
+  const micState = isRecordingActual ? 'recording' : (isRecProcessingActual || isOptimizing) ? 'processing' : isHovered ? 'hover' : 'idle';
 
   return (
     <div className="min-h-screen animated-bg relative">
@@ -473,17 +575,22 @@ export default function App() {
             {modelStatus.stage === 'downloading' && `模型下载中 ${modelStatus.downloadProgress || 0}%`}
             {modelStatus.stage === 'loading' && 'FunASR 模型加载中...'}
             {modelStatus.stage === 'error' && `模型错误: ${String(modelStatus.error || '未知')}`}
-            {modelStatus.stage === 'ready' && micState === 'recording' && '正在录音，再次点击停止'}
+            {modelStatus.stage === 'ready' && micState === 'recording' && '正在录音，文字实时显示中'}
             {modelStatus.stage === 'ready' && micState === 'processing' && '正在识别语音...'}
             {modelStatus.stage === 'ready' && micState === 'optimizing' && 'AI 正在优化文本...'}
             {modelStatus.stage === 'ready' && micState === 'idle' && `按 ${hotkey} 或点击麦克风`}
             {modelStatus.stage === 'ready' && micState === 'hover' && '点击开始录音'}
           </motion.p>
 
+          {/* Error display */}
+          {streamingError && (
+            <p className="mt-2 text-xs text-red-400/80 text-center">{streamingError}</p>
+          )}
+
           {/* Waveform when recording */}
           <div className="mt-2 h-8">
-            {isRecording && <Waveform active={true} />}
-            {isRecProcessing && <Waveform active={true} color="violet" />}
+            {isRecordingActual && <Waveform active={true} />}
+            {isRecProcessingActual && <Waveform active={true} color="violet" />}
           </div>
 
           {/* Hotkey & Mode Controls */}
@@ -617,6 +724,14 @@ export default function App() {
 
         {/* ── Text Display ── */}
         <div className="flex-1 overflow-y-auto min-h-0">
+          {/* ★ 流式实时识别（录音期间显示） */}
+          <StreamingTextPanel
+            green={preeditGreen}
+            yellow={preeditYellow}
+            red={preeditRed}
+            isActive={isRecordingActual}
+          />
+          {/* 最终结果 */}
           <TextPanel
             original={originalText}
             processed={processedText}

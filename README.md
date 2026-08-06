@@ -6,7 +6,7 @@
 
 <img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg" alt="License">
 <img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey" alt="Platform">
-<img src="https://img.shields.io/badge/release-v1.1.8-brightgreen" alt="Release">
+<img src="https://img.shields.io/badge/release-v1.2.0-brightgreen" alt="Release">
 <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome">
 
 </div>
@@ -26,163 +26,72 @@
 ## 架构
 
 ```
-┌──────────────────────────┐     HTTP REST     ┌──────────┐     ┌─────────────────┐
-│   Electron 桌面应用       │ ◄─────────────── ► │  nginx   │ ──► │  FunASR 容器 ×N  │
-│   (前端，原生运行)         │   localhost:8000   │  反代    │     │  (Python 后端)   │
-│                          │                    └──────────┘     │                 │
-│   • 系统托盘 / 快捷键     │                                     │  • 语音识别 ASR  │
-│   • 录音 / 剪贴板        │                                     │  • VAD/标点恢复  │
-│   • AI 文本优化          │                                     │  • 模型本地运行   │
-└──────────────────────────┘                                     └─────────────────┘
+┌──────────────────────────┐   WebSocket + REST  ┌─────────────────────┐
+│   Electron 桌面应用       │ ◄─────────────────► │  FastAPI 后端        │
+│   (前端，原生运行)         │    localhost:8000   │  (Python, 单进程)    │
+│                          │                     │                     │
+│   • 系统托盘 / 快捷键     │                     │  • 流式实时识别       │
+│   • 录音 / 三区文字预览    │                     │  • 离线 SenseVoice 纠正│
+│   • AI 校对              │                     │  • LLM 上下文校对     │
+│   • 热词文件监控           │                     │  • 热词自动重载       │
+└──────────────────────────┘                     └─────────────────────┘
 ```
 
-- **前端**：Electron + React，原生运行在桌面（需要托盘、快捷键、剪贴板权限）
-- **后端**：Python FunASR 服务，运行在 Podman/Docker 容器中（所有 Python 依赖封装隔离，不污染系统环境）
+- **前端**：Electron + React，原生桌面运行（托盘、快捷键、剪贴板）
+- **后端**：FastAPI + uvicorn，单进程承载 REST + WebSocket
 
----
 
 ## 快速开始
 
 ### 方式一：测试/开发环境（源码运行）
 
-适合开发调试、快速体验。前后端均从源码启动，模型首次自动下载。
-
-#### 前置条件
-
-- **Python 3.11+** 和 **uv**（Python 依赖管理）
-- **Node.js 18+** 和 **pnpm**（前端依赖管理）
-- **Linux / Windows**（均支持开发与打包运行，macOS 暂未适配）
-
-#### 1. 克隆项目
-
-```bash
-git clone https://github.com/lxp731/ququ.git
-cd ququ
-```
-
-#### 2. 启动后端（源码）
+#### 1. 启动后端
 
 ```bash
 cd backend
-
-# 安装 Python 依赖（首次）
 uv sync
-
-# 启动 FunASR 服务（首次运行自动下载模型 ~1.2GB，需 1-2 分钟）
-uv run python funasr_server.py --port 8000
+uv run python server.py --port 8000
 ```
 
-后端启动后访问 `http://127.0.0.1:8000/health` 验证，返回 `{"status":"ok"}` 即就绪。
+访问 `http://127.0.0.1:8000/health` → `{"status":"ok"}` 即就绪。首次启动自动下载模型 (~2GB)。
 
-#### 3. 启动前端（开发模式）
+#### 2. 启动前端
 
 ```bash
 cd frontend
 pnpm install
-pnpm run dev
+pnpm dev
 ```
 
-#### 4. 配置 AI 模型（可选）
+#### 3. 配置 AI 校对（可选）
 
-启动应用后，在**设置页面**中填入 AI 服务商的 **API Key**、**Base URL** 和**模型名称**。内置 DeepSeek / Qwen / OpenAI 一键预设，也支持其他兼容 OpenAI API 的服务商。
+设置页填入 API Key / Base URL / Model，支持 DeepSeek / Qwen / OpenAI 一键预设。
 
 ---
 
-### 方式二：生产环境（容器 + 桌面安装包）
-
-适合日常稳定使用。后端容器化运行，前端使用打包好的安装包。
-
-#### 前置条件
-
-- **Podman** 或 **Docker**（运行后端容器）
-
-#### 1. 安装 Podman
+### 方式二：容器部署
 
 ```bash
-# Arch / CachyOS
-sudo pacman -S podman
-
-# Ubuntu / Debian
-sudo apt install podman
-```
-
-#### 2. 启动后端容器
-
-```bash
-git clone https://github.com/lxp731/ququ.git
-cd ququ
-
-# 构建镜像并启动容器
+git clone https://github.com/lxp731/ququ.git && cd ququ
 podman compose up -d --build
-
-# 查看日志，等待模型加载完成（首次约 1-2 分钟，需下载 ~1.2GB 模型）
-podman compose logs -f backend
 ```
 
-> 模型文件缓存于 `~/.cache/modelscope`，销毁重建容器无需重新下载。
+模型缓存于 `~/.cache/modelscope`，重建容器无需重新下载。
 
-#### 3. 安装前端
-
-**Windows：**
-
-从 [Releases](https://github.com/lxp731/ququ/releases) 下载最新 `ququ-v*-portable.exe`，免安装，双击即用。
-
-**Arch 系 Linux：**
-
-```bash
-yay -S ququ-bin
-```
-
-**其他 Linux 发行版：**
-
-从 [Releases](https://github.com/lxp731/ququ/releases) 下载最新 `.AppImage` 文件：
-
-```bash
-chmod +x ququ-v*.AppImage
-./ququ-v*.AppImage
-```
-
-#### 4. 配置 AI 模型（可选）
-
-启动应用后，在**设置页面**中填入 AI 服务商的 **API Key**、**Base URL** 和**模型名称**。内置 DeepSeek / Qwen / OpenAI 一键预设，也支持其他兼容 OpenAI API 的服务商。
-
-> **提示**：
->1. 如果后端部署在其他主机，可在设置页面中修改 FunASR 后端地址，指向远程服务。
->2. 后端默认允许来自所有 IP 的访问，即 0.0.0.0:8000，安全生产环境自行限制。
+前端从 [Releases](https://github.com/lxp731/ququ/releases) 下载 AppImage 或 exe。
 
 ---
 
-## 后端性能调优
+## 功能
 
-源码运行时通过 `.env` 文件中的以下环境变量控制性能：
-
-| 参数 | 作用 | 默认值 |
-|------|------|--------|
-| `FUNASR_WORKERS` | Gunicorn worker 进程数。每个 worker 独占一套模型（约 3GB 内存），同时只能处理一个转写请求（代码有互斥锁保护）。**增加 workers 是提升并发的唯一途径**，代价是内存成倍增长。 | `1` |
-| `OMP_NUM_THREADS` | PyTorch 推理时使用的 CPU 核心数。控制单次转写的计算速度，值越大转写越快，但不应超过 CPU 物理核心数。 | `4` |
-| `FUNASR_THREADS` | Gunicorn 线程数。线程不参与实际转写，仅用于排队等待锁。值略大于预期的并发排队数即可，对资源占用极小。 | `8` |
-
-> **经验公式**：`FUNASR_WORKERS × OMP_NUM_THREADS ≤ CPU 核数`，避免多个 worker 争抢 CPU 互相拖慢。
-
-**容器部署**：每个容器固定 `FUNASR_WORKERS=1`，通过水平扩缩容提升并发：
-
-```bash
-# 扩容至 3 个后端实例
-podman compose up -d --scale backend=3
-```
-
-缩容时 `podman-compose`（Python 版）的 `--scale` 不生效，需手动操作：
-
-```bash
-# 先看当前有哪些实例
-podman ps --format '{{.Names}} {{.Status}}'
-
-# 停掉多余的实例
-podman stop ququ_backend_2 ququ_backend_3
-podman rm ququ_backend_2 ququ_backend_3
-```
-
-> nginx 通过 compose 内部 DNS 自动负载均衡到所有 backend 实例，无需额外配置。如果使用 Docker Compose，`--scale` 扩缩容均可直接生效。
+| 功能 | 说明 |
+|------|------|
+| 🎙️ 流式识别 | 边说边出字，三区管道（红/黄/绿）实时预览 |
+| 🔧 离线纠正 | SenseVoiceSmall 周期全量重识别，中英混合 + ITN + 标点 |
+| 🤖 AI 校对 | 绿区文字送 LLM 润色，上下文感知，逐句上屏 |
+| 📝 热词 | txt 文件一行一词，文件变化自动重载，广播通知前端 |
+| 🎹 快捷键 | Ctrl+Space 切换录音，长按模式（Linux evdev） |
+| 🌐 跨平台 | Linux (AppImage/deb) / Windows (portable exe) |
 
 ---
 
@@ -192,82 +101,75 @@ podman rm ququ_backend_2 ququ_backend_3
 
 ```
 ququ/
-├── frontend/              # Electron + React 桌面应用
-│   ├── src/
-│   │   ├── helpers/       # Electron 主进程模块
-│   │   ├── hooks/         # React hooks
-│   │   └── components/    # UI 组件
-│   ├── package.json
-│   └── vite.config.js
-├── backend/               # Python FunASR HTTP 服务（容器化）
-│   ├── funasr_server.py   # Flask REST API
-│   ├── Dockerfile
-│   └── pyproject.toml     # uv 依赖管理
-├── nginx.conf             # nginx 反代配置
-└── docker-compose.yml     # Podman/Docker 编排
+├── frontend/                  # Electron + React
+│   ├── src/App.jsx            # 主页面
+│   ├── src/settings.jsx       # 设置页
+│   ├── src/hooks/             # React hooks
+│   │   ├── useStreamingRecording.js  # 流式录音 (持久 WS)
+│   │   ├── streamingSession.js       # WS 客户端 (心跳/重连)
+│   │   └── useModelStatus.js         # 模型状态机
+│   └── src/helpers/           # 主进程模块 (IPC, 剪贴板, 按键监听)
+├── backend/                   # Python FastAPI
+│   ├── server.py              # 入口 (REST + WebSocket)
+│   ├── asr_engine.py          # ASR 引擎 (5 模型)
+│   ├── pipeline.py            # 三区管道 (CandidateBuffer + PTTPipeline)
+│   ├── llm_optimizer.py       # LLM 校对 (流式 OpenAI API)
+│   └── download_models.py     # 模型预下载
+├── nginx.conf
+└── docker-compose.yml
 ```
 
 ### 常用命令
 
 ```bash
-# 前端开发（frontend/ 目录下）
-pnpm run dev               # 启动 Electron + Vite 开发模式
-pnpm run build:renderer    # 构建前端
-pnpm run build             # 打包当前平台安装包（Windows: portable exe / Linux: AppImage）
+# 前端
+cd frontend
+pnpm dev                    # 开发模式
+pnpm lint                   # ESLint 检查
+pnpm test                   # vitest
+pnpm build:linux            # 打包 AppImage
 
-# 单独打包指定平台（跨平台构建）
-pnpm run build:linux       # 打包 Linux AppImage
-# Windows 便携版需在 Windows 上直接运行 pnpm run build
+# 后端
+cd backend
+uv run python server.py     # 源码启动
+uv run python test_phase1.py # 集成测试
+uv run --with ruff ruff check *.py  # lint
+uv run --with basedpyright basedpyright *.py  # type check
 
-# 后端容器（项目根目录）
-podman compose build       # 构建容器镜像
-podman compose up -d       # 启动容器
-podman compose down        # 停止容器
-podman compose logs -f backend # 查看日志
+# 容器
+podman compose up -d --build
+podman compose logs -f backend
+podman compose down
 ```
 
-### 后端 API
+### API
 
 | 端点 | 方法 | 说明 |
 |------|------|------|
 | `/health` | GET | 健康检查 |
-| `/status` | GET | 模型状态 |
-| `/transcribe` | POST | 上传音频（multipart/form-data），返回转录文本 |
-| `/stats` | GET | 性能统计 |
+| `/status` | GET | 模型状态 `{success, models_initialized, is_initializing}` |
+| `/transcribe` | POST | 离线批量转写 (旧版兼容) |
+| `/stream/ws` | WS | 流式识别 + PTT 控制 |
+
+### WebSocket 协议
+
+| 方向 | 消息 | 说明 |
+|------|------|------|
+| Client → Server | `start_listening` / `stop_listening` | PTT |
+| Client → Server | `config {llm, hotwords}` | 配置同步 |
+| Client → Server | `ping` | 心跳 (15s) |
+| Client → Server | binary | PCM int16 16kHz mono |
+| Server → Client | `preedit {green, yellow, red}` | 三区文字 |
+| Server → Client | `commit {text}` | 已提交 |
+| Server → Client | `hotwords_updated {count}` | 热词重载通知 |
 
 ---
-
-## 待办
-
-- [ ] **热词接口**：后端 `transcribe_audio` 已支持 `options["hotword"]` 参数，前端需要增加热词输入框，让用户自定义热词列表以提升特定场景下的识别准确率。
-
----
-
-## 技术栈
-
-| 层 | 技术 |
-|------|------|
-| 桌面框架 | Electron 36 |
-| 前端 | React 19, Vite 6, Tailwind CSS 4, shadcn/ui |
-| 语音识别 | FunASR (Paraformer-large, FSMN-VAD, CT-Transformer) |
-| AI 文本优化 | 兼容 OpenAI API（内置 DeepSeek / Qwen / OpenAI 预设） |
-| 后端框架 | Flask + gunicorn |
-| 容器化 | Podman / Docker Compose |
-| 数据库 | better-sqlite3 |
-| 依赖管理 | pnpm (Node), uv (Python) |
-
----
-
-## 参与贡献
-
-- 🤔 **提建议**：[Issues](https://github.com/lxp731/ququ/issues)
-- 🐛 **报 Bug**：[Issues](https://github.com/lxp731/ququ/issues)
-- 💻 **贡献代码**：Fork → 创建分支 → 提交 PR
 
 ## 致谢
 
-- [FunASR](https://github.com/modelscope/FunASR) — 阿里巴巴开源的工业级语音识别工具包
-- [shadcn/ui](https://ui.shadcn.com/) — 高质量 React 组件库
+- [FunASR](https://github.com/modelscope/FunASR) — 阿里巴巴工业级语音识别工具包
+- [YuHuang](https://github.com/Homio/YuHuang) — 语皇语音输入法（三区管道 + LLM 校对设计参考）
+- [ModelScope](https://modelscope.cn) — 模型托管平台
 
 ## 许可证
 

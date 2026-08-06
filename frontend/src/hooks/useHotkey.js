@@ -34,7 +34,7 @@ export const useHotkey = () => {
   }, [hotkey]);
 
   const syncRecordingState = useCallback(async (rec) => {
-    try { await window.electronAPI?.setRecordingState(rec); } catch (_) {}
+    try { await window.electronAPI?.setRecordingState(rec); } catch (_) { /* ignore */ }
   }, []);
 
   const formatHotkey = (h) => {

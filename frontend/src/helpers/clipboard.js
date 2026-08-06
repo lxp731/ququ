@@ -20,11 +20,11 @@ class ClipboardManager {
     try {
       execSync('pgrep -x ydotoold', { stdio: 'ignore' });
       tools.push({ name: 'ydotool', paste: () => spawn('ydotool', ['key', '29:1', '47:1', '47:0', '29:0']) });
-    } catch {}
+    } catch { /* ignore */ }
     // wtype (Wayland native)
-    try { execSync('which wtype', { stdio: 'ignore' }); tools.push({ name: 'wtype', paste: () => spawn('wtype', ['-M', 'ctrl', 'v', '-m', 'ctrl']) }); } catch {}
+    try { execSync('which wtype', { stdio: 'ignore' }); tools.push({ name: 'wtype', paste: () => spawn('wtype', ['-M', 'ctrl', 'v', '-m', 'ctrl']) }); } catch { /* ignore */ }
     // xdotool (X11/XWayland)
-    try { execSync('which xdotool', { stdio: 'ignore' }); tools.push({ name: 'xdotool', paste: () => spawn('xdotool', ['key', '--clearmodifiers', 'ctrl+v']) }); } catch {}
+    try { execSync('which xdotool', { stdio: 'ignore' }); tools.push({ name: 'xdotool', paste: () => spawn('xdotool', ['key', '--clearmodifiers', 'ctrl+v']) }); } catch { /* ignore */ }
     this._pasteCmd = tools;
     this._log('📋 可用粘贴工具: ' + tools.map(t => t.name).join(', ') || '无');
     return tools;
@@ -67,9 +67,9 @@ class ClipboardManager {
       // daemon 没运行，尝试启动
       try {
         const sock = '/run/user/' + process.getuid() + '/.ydotool_socket';
-        try { fs.unlinkSync(sock); } catch {}
+        try { fs.unlinkSync(sock); } catch { /* ignore */ }
         spawn('ydotoold', [], { detached: true, stdio: 'ignore' }).unref();
-      } catch {}
+      } catch { /* ignore */ }
     }
 
     const tools = this._detectPasteTools();
