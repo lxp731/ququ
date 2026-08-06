@@ -80,11 +80,11 @@ Server → Client:  JSON {"type": "final", "text": "今天天气真不错", "is_
 ```
 
 **任务清单**：
-- [ ] 安装 `paraformer-zh-streaming` 模型（约 200MB）
-- [ ] 实现 `StreamingASR` 封装类（cache 管理、reset）
-- [ ] 实现 WebSocket 端点 `/stream/ws`
-- [ ] 实现 session 管理（多会话隔离、超时清理）
-- [ ] 单元测试：模拟短/长/中英混语音输入
+- [x] 安装 `paraformer-zh-streaming` 模型（约 200MB）
+- [x] 实现 `StreamingASR` 封装类（cache 管理、reset）
+- [x] 实现 WebSocket 端点 `/stream/ws`
+- [x] 实现 session 管理（多会话隔离、超时清理）
+- [x] 单元测试：引擎/管道/WS协议（`test_phase1.py`）
 
 **预估工作量**：3-5 天
 **模型增量**：~200MB（paraformer-zh-streaming）
@@ -137,10 +137,10 @@ ai.start();
 ```
 
 **任务清单**：
-- [ ] Linux: `arecord` 子进程采集 raw PCM
+- [x] Linux: `arecord` 子进程采集 raw PCM (`nativeAudio.js`)
 - [ ] Windows: 调研 naudiodon / WASAPI 方案
-- [ ] 设备选择：扫描可用麦克风，支持 GUI 切换
-- [ ] 音频流通过 IPC 传到渲染进程
+- [x] 设备选择：扫描可用麦克风 (`nativeAudio.js listDevices()`)
+- [ ] 音频流通过 IPC (当前用浏览器 `getUserMedia` 直接送 WS, 更简单)
 - [ ] 压测：确认无内存泄漏、无缓冲区溢出
 
 **预估工作量**：3-4 天
@@ -168,10 +168,10 @@ const [stableText, setStableText] = useState('');        // 已稳定的文字
 ```
 
 **任务清单**：
-- [ ] WebSocket 客户端封装（自动重连、心跳）
-- [ ] 流式文字状态管理（累积、去重、闪烁光标）
-- [ ] 稳定文字 vs 草稿文字的视觉区分
-- [ ] 录音停止后切换到最终结果展示
+- [x] WebSocket 客户端封装（自动重连、心跳）
+- [x] 流式文字状态管理（三区管道去重、闪烁光标）
+- [x] 稳定文字 vs 草稿文字的视觉区分（绿/黄/红三区透明度）
+- [x] 录音停止后切换到最终结果展示
 
 **预估工作量**：2-3 天
 
@@ -197,10 +197,10 @@ function onStreamingText(fullText) {
 ```
 
 **任务清单**：
-- [ ] Linux: ydotool/wtype 模拟打字
-- [ ] Windows: SendInput / PowerShell 模拟
-- [ ] 稳定前缀检测算法（LCP 思想）
-- [ ] 与流式文字的视觉同步（已上屏 + 草稿）
+- [x] Linux: ydotool/wtype 模拟打字
+- [x] Windows: SendInput (clipboard.js 已实现)
+- [x] 稳定前缀检测（三区距离模型替代 LCP, pipeline.py CandidateBuffer）
+- [x] 实时上屏（后端 commit 驱动 paste + toast）
 
 **预估工作量**：2 天
 
@@ -244,11 +244,11 @@ services:
 ```
 
 **任务清单**：
-- [ ] 自动检测 cuda/mps/cpu
-- [ ] 所有模型统一使用检测到的设备
-- [ ] GPU 显存监控（防 OOM）
-- [ ] Docker/Podman GPU 透传文档
-- [ ] 环境变量 `FUNASR_DEVICE` 支持手动覆盖
+- [x] 自动检测 cuda/mps/cpu (detect_device)
+- [x] 所有模型统一使用检测到的设备 (device 参数)
+- [ ] GPU 显存监控（防 OOM）— 后续
+- [ ] Docker/Podman GPU 透传文档 — 后续
+- [x] 环境变量 `FUNASR_DEVICE` 支持手动覆盖
 
 **预估工作量**：1 天
 
@@ -281,12 +281,12 @@ self.sense_voice = AutoModel(
 - 50+ 语言支持：中文、英文、粤语、日语、韩语
 
 **任务清单**：
-- [ ] 模型下载集成（首次启动自动下载 ~450MB）
-- [ ] `SenseVoiceASR` 封装类
-- [ ] `/sensevoice/transcribe` API 端点
-- [ ] 替换 finalize 阶段的 paraformer-large 为 SenseVoice
-- [ ] 测试中英混合场景准确率
-- [ ] 与现有 paraformer 的 A/B 对比
+- [x] 模型下载集成（download_models.py 预下载 5 模型）
+- [x] SenseVoiceSmall 集成（asr_engine.py ASREngine）
+- [x] 已集成到统一引擎，不走单独 API
+- [x] finalize 优先 SenseVoice, fallback paraformer
+- [ ] 测试中英混合场景准确率 — 后续
+- [ ] 与现有 paraformer 的 A/B 对比 — 后续
 
 **预估工作量**：2-3 天
 **模型增量**：~450MB (FP16) 或 254MB (GGUF Q8)
@@ -315,9 +315,9 @@ punc:
 ```
 
 **任务清单**：
-- [ ] 模型配置文件格式设计
-- [ ] 设置页面新增"模型选择"区域
-- [ ] 运行时可切换模型（重新加载）
+- [x] 模型配置已通过 ARG/ENV 参数化, 无需单独文件
+- [ ] 设置页面新增"模型选择"区域 — 后续
+- [ ] 运行时可切换模型 — 后续
 
 **预估工作量**：1 天
 
@@ -397,10 +397,10 @@ class LCPTracker:
 ```
 
 **任务清单**：
-- [ ] 实现 `LCPTracker` 类
-- [ ] 后台离线校对循环（asyncio task）
-- [ ] 流式文字 + 离线文字的状态同步
-- [ ] 前端多区显示：稳定(亮) + 校对中(半透明) + 流式草稿(闪烁)
+- [x] 三区距离模型（CandidateBuffer, 替代 LCPTracker）
+- [x] 后台离线校对循环（_periodic_offline_correction）
+- [x] 流式+离线状态同步（pipeline.on_intermediate / on_offline_correction）
+- [x] 前端三区显示（StreamingTextPanel green/yellow/red）
 
 **预估工作量**：4-5 天
 
@@ -427,9 +427,9 @@ function StreamingTextPanel({ stable, proofreading, draft }) {
 ```
 
 **任务清单**：
-- [ ] `StreamingTextPanel` 组件
-- [ ] 三区文字颜色/透明度动画
-- [ ] 稳定文字滑入上屏动画
+- [x] StreamingTextPanel 三区渲染组件
+- [x] 三区透明度动画 (white/90 + white/60 + white/30)
+- [ ] 稳定文字滑入上屏动画 — 后续
 
 **预估工作量**：1-2 天
 
@@ -516,11 +516,11 @@ async def refine_final_long_text(text: str) -> str:
 ```
 
 **任务清单**：
-- [ ] 实现 `LLMRefiner` 类（上下文拼接、prompt 管理）
-- [ ] 终审切段 + 并行请求
-- [ ] 超时回退策略
-- [ ] 防回显逻辑（LLM 抄写上下文）
-- [ ] 连接复用（httpx AsyncClient 长驻）
+- [x] LLMOptimizer（上下文 prompt + 流式 API）
+- [x] 终审切段并行请求（_refine_final, asyncio.gather）
+- [x] 超时回退（LLM_REFINE_TIMEOUT 8s / LLM_FINAL_TIMEOUT 6s）
+- [x] 防回显剥离（_strip_context_echo）
+- [x] 连接复用（_get_client, trust_env=False）
 
 **预估工作量**：3-4 天
 
@@ -530,35 +530,35 @@ async def refine_final_long_text(text: str) -> str:
 
 ### 5.1 错误恢复
 
-- [ ] 音频设备热插拔：设备断开 → 自动暂停 → 重连后恢复
-- [ ] WebSocket 断线重连：指数退避，最大 5 次
-- [ ] ASR 模型加载失败不阻塞启动
-- [ ] 音频缓冲区溢出保护
-- [ ] LLM 调用超时不阻塞主流程
+- [ ] 音频设备热插拔 — 后续：设备断开 → 自动暂停 → 重连后恢复
+- [x] WebSocket 重连（指数退避 5 次）
+- [x] ASR 模型加载失败不阻塞（_load_models 异常安全 + mock 模式）
+- [ ] 音频缓冲区溢出保护 — 后续
+- [x] LLM 超时不阻塞（超时回退原文提交）
 
 ### 5.2 性能监控
 
-- [ ] 端到端延迟埋点（按键→首次出字 / 按键→终审上屏）
-- [ ] WebSocket 消息往返时间监控
-- [ ] GPU/CPU 利用率展示
-- [ ] 模型推理耗时分布
-- [ ] 内存使用趋势
+- [ ] 端到端延迟埋点 — 后续（按键→首次出字 / 按键→终审上屏）
+- [ ] WebSocket 往返时间 — 后续
+- [ ] GPU/CPU 利用率 — 后续
+- [ ] 模型推理耗时 — 后续
+- [ ] 内存使用趋势 — 后续
 
 ### 5.3 用户体验
 
-- [ ] 长按模式（hold-to-talk）：按住说话，松手上屏
-- [ ] 点击模式（toggle）：点一下开始，再点一下结束
-- [ ] 快捷键自定义（支持组合键）
-- [ ] 录音状态系统托盘图标变化
-- [ ] 静音检测 + 自动停止（可配置）
+- [x] 长按模式（hold-to-talk, keyWatcher evdev）
+- [x] 点击模式（toggle, App.jsx recordingMode）
+- [x] 快捷键自定义（isCapturingHotkey 捕获）
+- [x] 录音状态托盘变化（tray.js setStatus + syncRecordingState）
+- [ ] 静音检测 + 自动停止 — 后续
 
 ### 5.4 测试
 
-- [ ] 后端 ASR 单元测试
-- [ ] WebSocket 协议集成测试
-- [ ] 前端组件测试
-- [ ] 端到端测试（模拟完整语音输入流程）
-- [ ] 性能基准测试（RTF、延迟分布）
+- [x] 后端单元测试（test_phase1.py 7/7 通过）
+- [x] WebSocket 协议集成测试（test_phase1.py WS protocol）
+- [x] 前端组件测试（vitest hooks/components）
+- [ ] 端到端测试 — 后续
+- [ ] 性能基准测试 — 后续
 
 ---
 
@@ -566,33 +566,34 @@ async def refine_final_long_text(text: str) -> str:
 
 ### 6.1 打包与部署
 
-- [ ] 一键安装脚本（YuHuang 风格的 `install.sh`）
-- [ ] 模型自动下载（首次启动后台静默下载）
-- [ ] Docker 镜像发布到 Docker Hub / GHCR
-- [ ] GitHub Actions CI/CD（测试 + 构建 + 发布）
-- [ ] AUR 包（`ququ-bin` 已有，需更新）
+- [ ] 一键安装脚本 — 后续
+- [x] 模型自动下载（启动时 download_models.py 预下载）
+- [ ] Docker 镜像发布 — 后续
+- [x] GitHub Actions CI/CD（build.yml, Linux+macOS+Windows）
+- [ ] AUR 包更新 — 后续
 
 ### 6.2 文档
 
-- [ ] 架构设计文档（数据流、模块关系）
-- [ ] API 文档（WebSocket 协议）
-- [ ] 贡献指南
-- [ ] 性能调优指南（workers/threads/GPU 配置）
+- [x] 架构文档（AGENTS.md + README.md 已更新）
+- [x] API 文档（README.md + backend/AGENTS.md WS 协议表）
+- [ ] 贡献指南 — 后续
+- [x] 性能调优指南（README.md 环境变量表）
 
 ---
 
 ## 技术选型对比
 
-| 维度 | 当前 (ququ) | Phase 1-3 目标 | YuHuang 参考 |
-|------|------------|---------------|-------------|
-| ASR 模型 | 1 个 (paraformer-large) | 3 个 (streaming + large + SenseVoice) | 5 个 |
-| 识别方式 | 录完批量 | 流式 + 离线校对 | 流式 + 离线校对 |
-| 音频传输 | WebM→WAV→HTTP | Raw PCM→WebSocket | Raw PCM→Unix Socket |
-| 文字显示 | 录完才出现 | 边说边出（三区） | 光标处浮现（三区） |
-| 上屏方式 | 剪贴板/模拟粘贴 | 实时模拟打字 | fcitx5 preedit |
-| GPU 支持 | ❌ 硬编码 CPU | ✅ 自动检测 | ✅ 自动检测 |
-| LLM 润色 | 一次性全文 | 增量切段并行 | 增量切段并行 |
-| 模型大小 | ~1.2GB | ~2GB (含 streaming + SenseVoice) | ~3GB+ (5 个模型) |
+| 维度 | Phase 1-5 实现 | 说明 |
+|------|---------------|------|
+| ASR 模型 | 5 个 | streaming + SenseVoice + large + VAD + punc |
+| 识别方式 | 流式 + 离线周期纠正 | 边说边出字, SenseVoice 自动校对 |
+| 音频传输 | browser PCM → WebSocket | raw PCM int16 16kHz mono |
+| 文字显示 | 三区实时 | 绿(稳定)/黄(校对中)/红(草稿) |
+| 上屏方式 | 自动粘贴 + toast | ydotool/wtype/ctrl+v 模拟 |
+| GPU 支持 | ✅ 自动检测 | cuda/mps/cpu fallback, FUNASR_DEVICE 覆盖 |
+| LLM 润色 | ✅ 增量切段并行 | 上下文感知, 关思考梯子, 超时回退 |
+| 热词 | ✅ 文件监控 | txt 一行一词, 变化自动重载+通知 |
+| 模型大小 | ~2GB | 5 模型, 缓存于 ~/.cache/modelscope |
 
 ---
 
