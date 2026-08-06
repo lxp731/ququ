@@ -101,8 +101,8 @@ jobs:
       - name: Build renderer
         run: cd frontend && pnpm run build:renderer
 
-      - name: Build macOS (dmg)
-        run: cd frontend && npx electron-builder --mac --x64 --publish never
+      - name: Build macOS (dmg + zip)
+        run: cd frontend && npx electron-builder --mac dmg zip --x64 --publish never
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           ELECTRON_MIRROR: https://github.com/electron/electron/releases/download/
@@ -111,7 +111,9 @@ jobs:
         uses: actions/upload-artifact@v6
         with:
           name: ququ-macos
-          path: frontend/release/ququ-v*.dmg
+          path: |
+            frontend/release/ququ-v*.dmg
+            frontend/release/ququ-v*.zip
           retention-days: 7
 
   build-windows:
@@ -215,6 +217,7 @@ jobs:
             | 🐧 Linux | `ququ-v${{ steps.version.outputs.version }}.deb` | deb 包（Debian/Ubuntu/Mint）|
             | 🐧 Linux | `ququ-v${{ steps.version.outputs.version }}.rpm` | rpm 包（Fedora/RHEL/CentOS）|
             | 🍎 macOS | `ququ-v${{ steps.version.outputs.version }}.dmg` | macOS 安装包 |
+            | 🍎 macOS | `ququ-v${{ steps.version.outputs.version }}.zip` | macOS 免安装版 |
             | 🪟 Windows | `ququ-v${{ steps.version.outputs.version }}.exe` | 免安装便携版 |
 
             ### 安装
@@ -242,6 +245,7 @@ jobs:
             dist/ququ-v*.deb
             dist/ququ-v*.rpm
             dist/ququ-v*.dmg
+            dist/ququ-v*.zip
             dist/ququ-v*.exe
             dist/checksums.txt
           draft: false
