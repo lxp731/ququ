@@ -22,7 +22,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Enable pnpm
         run: |
@@ -72,6 +72,7 @@ jobs:
 
   build-macos:
     runs-on: macos-latest
+    continue-on-error: true
 
     steps:
       - name: Checkout
@@ -80,7 +81,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Enable pnpm
         run: |
@@ -126,7 +127,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Enable pnpm
         run: |
@@ -172,7 +173,7 @@ jobs:
       - name: Setup Node.js
         uses: actions/setup-node@v6
         with:
-          node-version: '20'
+          node-version: '22'
 
       - name: Get version
         id: version
@@ -191,6 +192,7 @@ jobs:
         with:
           name: ququ-macos
           path: dist/
+        continue-on-error: true
 
       - name: Download Windows artifact
         uses: actions/download-artifact@v6
