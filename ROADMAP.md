@@ -139,6 +139,7 @@ ai.start();
 **任务清单**：
 - [x] Linux: `arecord` 子进程采集 raw PCM (`nativeAudio.js`)
 - [ ] Windows: 调研 naudiodon / WASAPI 方案
+- [x] macOS: 通过浏览器 getUserMedia 采集音频
 - [x] 设备选择：扫描可用麦克风 (`nativeAudio.js listDevices()`)
 - [ ] 音频流通过 IPC (当前用浏览器 `getUserMedia` 直接送 WS, 更简单)
 - [ ] 压测：确认无内存泄漏、无缓冲区溢出
@@ -570,6 +571,7 @@ async def refine_final_long_text(text: str) -> str:
 - [x] 模型自动下载（启动时 download_models.py 预下载）
 - [ ] Docker 镜像发布 — 后续
 - [x] GitHub Actions CI/CD（build.yml, Linux+macOS+Windows）
+- [x] macOS dmg + zip 打包 (CI macos-latest, electron-builder)
 - [ ] AUR 包更新 — 后续
 
 ### 6.2 文档

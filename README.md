@@ -5,7 +5,7 @@
 **开源免费的 Wispr Flow 替代方案 | 为中文而生的下一代智能语音工作流**
 
 <img src="https://img.shields.io/badge/license-Apache_2.0-blue.svg" alt="License">
-<img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux-lightgrey" alt="Platform">
+<img src="https://img.shields.io/badge/platform-Windows%20%7C%20Linux%20%7C%20macOS-lightgrey" alt="Platform">
 <img src="https://img.shields.io/badge/release-v1.2.0-brightgreen" alt="Release">
 <img src="https://img.shields.io/badge/PRs-welcome-brightgreen.svg" alt="PRs Welcome">
 
@@ -78,7 +78,7 @@ podman compose up -d --build
 
 模型缓存于 `~/.cache/modelscope`，重建容器无需重新下载。
 
-前端从 [Releases](https://github.com/lxp731/ququ/releases) 下载 AppImage 或 exe。
+前端从 [Releases](https://github.com/lxp731/ququ/releases) 下载：Linux 用 AppImage/deb/rpm，macOS 用 dmg/zip，Windows 用 exe 便携版。
 
 ---
 
@@ -90,8 +90,8 @@ podman compose up -d --build
 | 🔧 离线纠正 | SenseVoiceSmall 周期全量重识别，中英混合 + ITN + 标点 |
 | 🤖 AI 校对 | 绿区文字送 LLM 润色，上下文感知，逐句上屏 |
 | 📝 热词 | txt 文件一行一词，文件变化自动重载，广播通知前端 |
-| 🎹 快捷键 | Ctrl+Space 切换录音，长按模式（Linux evdev） |
-| 🌐 跨平台 | Linux (AppImage/deb) / Windows (portable exe) |
+| 🎹 快捷键 | Ctrl+Space 切换录音，长按模式（Linux evdev / macOS 回退切换） |
+| 🌐 跨平台 | Linux (AppImage/deb/rpm) / macOS (dmg/zip) / Windows (portable exe) |
 
 ---
 
@@ -127,7 +127,9 @@ cd frontend
 pnpm dev                    # 开发模式
 pnpm lint                   # ESLint 检查
 pnpm test                   # vitest
-pnpm build:linux            # 打包 AppImage
+pnpm build:linux            # 打包 AppImage + deb + rpm
+pnpm build:mac              # 打包 dmg + zip
+pnpm build:win              # 打包 portable exe
 
 # 后端
 cd backend

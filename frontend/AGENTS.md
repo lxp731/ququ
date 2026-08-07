@@ -6,7 +6,9 @@
 pnpm install               # 安装依赖
 pnpm dev                   # 开发模式 (Vite + Electron)
 pnpm build:renderer        # 构建 Vite
-pnpm build:linux           # 打包 AppImage + deb
+pnpm build:linux           # 打包 AppImage + deb + rpm
+pnpm build:mac             # 打包 dmg + zip
+pnpm build:win             # 打包 portable exe
 pnpm lint                  # ESLint
 pnpm test                  # vitest
 ```
