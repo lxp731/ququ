@@ -68,8 +68,12 @@ ququ/
   → server.py → ASREngine (流式 paraformer-zh-streaming)
   → PTTPipeline (三区管道)
   → 流式模型中间结果 → 离线 SenseVoiceSmall 周期纠正
-  → LLM 绿区校对 → 逐句上屏
+  → LLM 绿区校对 → 浮动窗逐句上屏 → 自动粘贴
 ```
+
+浮动预览窗是独立的 frameless BrowserWindow（`floating.html`），
+录音时从屏幕底部滑入，停止后自动淡出。鼠标穿透文字区域，
+拖拽手柄可调整位置。
 
 ### 三区管道 (来自 YuHuang)
 
@@ -110,4 +114,5 @@ ququ/
 - **GPU 自动检测**：cuda → mps → cpu 逐级 fallback，`FUNASR_DEVICE` 环境变量覆盖
 - **热词文件监控**：os.stat 轮询 mtime (2s)，变化自动重载并广播通知前端
 - **长按录音**：Linux evdev / Windows GetAsyncKeyState / macOS 回退切换模式
+- **浮动三区预览窗**：录音时显示在屏幕底部居中（frameless, alwaysOnTop, 鼠标穿透），显示绿/黄/红三区文字，停止后立即消失。拖拽后记住位置，下次录音时复用
 - **设置持久化**：SQLite 存于用户数据目录，key-value 模式

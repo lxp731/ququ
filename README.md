@@ -31,9 +31,10 @@
 │   (前端，原生运行)         │    localhost:8000   │  (Python, 单进程)    │
 │                          │                     │                     │
 │   • 系统托盘 / 快捷键     │                     │  • 流式实时识别       │
-│   • 录音 / 三区文字预览    │                     │  • 离线 SenseVoice 纠正│
+│   • 录音 / 浮动三区文字    │                     │  • 离线 SenseVoice 纠正│
 │   • AI 校对              │                     │  • LLM 上下文校对     │
 │   • 热词文件监控           │                     │  • 热词自动重载       │
+│   • 桌面浮动预览窗 (屏幕底部)│                    │                     │
 └──────────────────────────┘                     └─────────────────────┘
 ```
 
@@ -86,7 +87,7 @@ podman compose up -d --build
 
 | 功能 | 说明 |
 |------|------|
-| 🎙️ 流式识别 | 边说边出字，三区管道（红/黄/绿）实时预览 |
+| 🎙️ 流式识别 | 边说边出字，三区管道（红/黄/绿）桌面浮动预览窗实时显示 |
 | 🔧 离线纠正 | SenseVoiceSmall 周期全量重识别，中英混合 + ITN + 标点 |
 | 🤖 AI 校对 | 绿区文字送 LLM 润色，上下文感知，逐句上屏 |
 | 📝 热词 | txt 文件一行一词，文件变化自动重载，广播通知前端 |
@@ -104,6 +105,7 @@ ququ/
 ├── frontend/                  # Electron + React
 │   ├── src/App.jsx            # 主页面
 │   ├── src/settings.jsx       # 设置页
+│   ├── floating.html          # 桌面浮动三区预览窗 (独立 BrowserWindow)
 │   ├── src/hooks/             # React hooks
 │   │   ├── useStreamingRecording.js  # 流式录音 (持久 WS)
 │   │   ├── streamingSession.js       # WS 客户端 (心跳/重连)

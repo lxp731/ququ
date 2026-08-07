@@ -20,7 +20,7 @@
 2. **音频链路损耗大**：Opus 有损编码 → 解码 → WAV，额外延迟 + 准确率损失
 3. **纯 CPU 运行**：硬编码 `device="cpu"`，有 GPU 也用不上
 4. **单模型**：一个 paraformer-large 干所有活，无流式预览、无离线校对
-5. **上屏体验割裂**：文字出现在 Electron 窗口里，需要手动粘贴或等自动粘贴
+5. **上屏体验割裂**：文字出现在 Electron 窗口里，需要手动粘贴或等自动粘贴（✅ 已解决：桌面浮动预览窗 + 绿区逐句自动粘贴）
 
 ---
 
@@ -171,7 +171,7 @@ const [stableText, setStableText] = useState('');        // 已稳定的文字
 **任务清单**：
 - [x] WebSocket 客户端封装（自动重连、心跳）
 - [x] 流式文字状态管理（三区管道去重、闪烁光标）
-- [x] 稳定文字 vs 草稿文字的视觉区分（绿/黄/红三区透明度）
+- [x] 稳定文字 vs 草稿文字的视觉区分（绿/黄/红三区颜色，桌面浮动预览窗显示）
 - [x] 录音停止后切换到最终结果展示
 
 **预估工作量**：2-3 天
@@ -590,7 +590,7 @@ async def refine_final_long_text(text: str) -> str:
 | ASR 模型 | 5 个 | streaming + SenseVoice + large + VAD + punc |
 | 识别方式 | 流式 + 离线周期纠正 | 边说边出字, SenseVoice 自动校对 |
 | 音频传输 | browser PCM → WebSocket | raw PCM int16 16kHz mono |
-| 文字显示 | 三区实时 | 绿(稳定)/黄(校对中)/红(草稿) |
+| 文字显示 | 桌面浮动预览窗 | 绿(稳定)/黄(校对中)/红(草稿)三区颜色，屏幕底部浮动，鼠标穿透 |
 | 上屏方式 | 自动粘贴 + toast | ydotool/wtype/ctrl+v 模拟 |
 | GPU 支持 | ✅ 自动检测 | cuda/mps/cpu fallback, FUNASR_DEVICE 覆盖 |
 | LLM 润色 | ✅ 增量切段并行 | 上下文感知, 关思考梯子, 超时回退 |

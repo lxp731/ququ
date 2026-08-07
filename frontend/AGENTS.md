@@ -27,7 +27,7 @@ pnpm test                  # vitest
 │  src/helpers/                           │
 │    ├── ipcHandlers.js   IPC 处理        │
 │    ├── funasrManager.js 后端连接管理    │
-│    ├── windowManager.js 多窗口          │
+│    ├── windowManager.js 多窗口 (含浮动预览窗) │
 │    ├── tray.js          系统托盘        │
 │    ├── hotkeyManager.js 全局快捷键      │
 │    ├── clipboard.js     跨平台粘贴      │
@@ -37,6 +37,7 @@ pnpm test                  # vitest
 └─────────────────────────────────────────┘
          │  IPC (preload.js)
 ┌─ 渲染进程 (React) ──────────────────────┐
+│  floating.html             浮动三区预览窗 │
 │  src/App.jsx            主页面          │
 │  src/settings.jsx       设置页          │
 │  src/history.jsx        转录历史        │
@@ -52,7 +53,7 @@ pnpm test                  # vitest
 ## 关键设计
 
 - **持久 WS 连接**：组件 mount 时建立，unmount 断开。心跳 15s，自动重连指数退避最多 5 次
-- **流式录音**：TT start → getUserMedia → WebSocket PCM → 后端 Pipeline → preedit 三区渲染 → 后端 commit → 自动粘贴
+- **流式录音**：TT start → getUserMedia → WebSocket PCM → 后端 Pipeline → preedit 三区渲染（浮动窗 + 主窗口内嵌）→ 后端 commit → 自动粘贴
 - **LLM 配置**：WS 连接后自动从 SQLite 读取发送 config，设置页修改后立即同步
 - **热词通知**：后端文件变化 → broadcast → 主窗口 toast + SQLite + IPC → 设置页实时刷新
 

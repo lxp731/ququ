@@ -34,6 +34,12 @@ class IPCHandlers {
     ipcMain.handle('close-settings-window', () => { this.wm.closeSettingsWindow(); return true; });
     ipcMain.handle('hide-settings-window', () => { this.wm.hideSettingsWindow(); return true; });
 
+    // ── 浮动三区预览窗 ──
+    ipcMain.handle('show-floating-window', async () => { await this.wm.showFloatingWindow(); return true; });
+    ipcMain.handle('hide-floating-window', () => { this.wm.hideFloatingWindow(); return true; });
+    ipcMain.handle('update-floating-preedit', (_e, data) => { this.wm.updateFloatingPreedit(data); return true; });
+    ipcMain.handle('move-floating-window', (_e, dx, dy) => { this.wm.moveFloatingWindow(dx, dy); return true; });
+
     // ── 录音 ──
     ipcMain.handle('start-recording', () => ({ success: true }));
     ipcMain.handle('stop-recording', () => ({ success: true }));

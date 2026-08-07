@@ -107,6 +107,14 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeSettingsWindow: () => ipcRenderer.invoke('close-settings-window'),
   hideSettingsWindow: () => ipcRenderer.invoke('hide-settings-window'),
 
+  // 浮动三区预览窗
+  showFloatingWindow: () => ipcRenderer.invoke('show-floating-window'),
+  hideFloatingWindow: () => ipcRenderer.invoke('hide-floating-window'),
+  updateFloatingPreedit: (data) => ipcRenderer.invoke('update-floating-preedit', data),
+  moveFloatingWindow: (dx, dy) => ipcRenderer.invoke('move-floating-window', dx, dy),
+  onFloatingPreedit: (cb) => on('floating-preedit-update', cb),
+  onFloatingVisibility: (cb) => on('floating-visibility-change', cb),
+
   // 中文
   detectLanguage: (t) => ipcRenderer.invoke('detect-language', t),
   segmentChinese: (t) => ipcRenderer.invoke('segment-chinese', t),

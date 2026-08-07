@@ -79,6 +79,7 @@ async function startApp() {
   // 创建窗口
   try { await wm.createMainWindow(); logger.info('主窗口创建成功'); } catch (e) { logger.error('主窗口创建失败:', e); }
   try { await wm.createSettingsWindow(); logger.info('设置窗口创建成功'); } catch (e) { logger.error('设置窗口创建失败:', e); }
+  try { await wm.createFloatingWindow(); logger.info('浮动预览窗创建成功'); } catch (e) { logger.error('浮动预览窗创建失败:', e); }
 
   // 托盘
   tray.setWindows(wm.mainWindow, wm.settingsWindow);

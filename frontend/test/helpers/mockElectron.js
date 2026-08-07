@@ -109,6 +109,14 @@ export function mockElectronAPI(overrides = {}) {
     closeSettingsWindow: vi.fn(),
     hideSettingsWindow: vi.fn(),
 
+    // ── 浮动三区预览窗 ──
+    showFloatingWindow: vi.fn().mockResolvedValue(true),
+    hideFloatingWindow: vi.fn().mockResolvedValue(true),
+    updateFloatingPreedit: vi.fn().mockResolvedValue(true),
+    moveFloatingWindow: vi.fn().mockResolvedValue(true),
+    onFloatingPreedit: vi.fn().mockReturnValue(() => {}),
+    onFloatingVisibility: vi.fn().mockReturnValue(() => {}),
+
     // ── 中文 ──
     detectLanguage: vi.fn().mockResolvedValue({ language: 'zh-CN', confidence: 0.95 }),
     segmentChinese: vi.fn().mockResolvedValue({ segments: [] }),

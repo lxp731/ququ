@@ -91,21 +91,6 @@ export const useStreamingRecording = () => {
         return () => { cancelled = true; session.stop(); sessionRef.current = null; };
     }, []);
 
-    // Cleanup audio on unmount
-    useEffect(() => {
-        return () => {
-            if (streamRef.current) {
-                streamRef.current.getTracks().forEach(t => t.stop());
-                streamRef.current = null;
-            }
-            if (ctxRef.current && ctxRef.current.state !== 'closed') {
-                ctxRef.current.close();
-                ctxRef.current = null;
-            }
-            _cleanupAudio();
-        };
-    }, []);
-
     // ── Audio cleanup helper ──
     const _cleanupAudio = () => {
         if (processorRef.current) {
@@ -125,6 +110,21 @@ export const useStreamingRecording = () => {
             ctxRef.current = null;
         }
     };
+
+    // Cleanup audio on unmount
+    useEffect(() => {
+        return () => {
+            if (streamRef.current) {
+                streamRef.current.getTracks().forEach(t => t.stop());
+                streamRef.current = null;
+            }
+            if (ctxRef.current && ctxRef.current.state !== 'closed') {
+                ctxRef.current.close();
+                ctxRef.current = null;
+            }
+            _cleanupAudio();
+        };
+    }, []);
 
     // ── Start Recording ──
 

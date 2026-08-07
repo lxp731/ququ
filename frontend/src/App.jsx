@@ -371,6 +371,9 @@ function MainApp() {
     setPreeditGreen(green || '');
     setPreeditYellow(yellow || '');
     setPreeditRed(red || '');
+    if (window.electronAPI?.updateFloatingPreedit) {
+      window.electronAPI.updateFloatingPreedit({ green: green || '', yellow: yellow || '', red: red || '' });
+    }
   }, []);
 
   const handleCommit = useCallback(async (text) => {
@@ -386,6 +389,11 @@ function MainApp() {
     setPreeditYellow('');
     setPreeditRed('');
     await safePaste(text);
+    // 全部提交完成，1.5s 后淡出消失
+    window.electronAPI?.updateFloatingPreedit?.({ green: '', yellow: '', red: '' });
+    setTimeout(() => {
+      window.electronAPI?.hideFloatingWindow?.();
+    }, 0);
   }, [safePaste]);
 
   const handleHotwordsUpdated = useCallback(async (count) => {
@@ -470,6 +478,13 @@ function MainApp() {
   useEffect(() => { isRecProcessingRef.current = isRecProcessingActual; });
   useEffect(() => { startRef.current = startRecording; });
   useEffect(() => { stopRef.current = stopRecording; });
+
+  // Show floating preedit overlay when recording starts
+  useEffect(() => {
+    if (isRecordingActual) {
+      window.electronAPI?.showFloatingWindow?.();
+    }
+  }, [isRecordingActual]);
 
   // Hold mode: KeyWatcher (evdev) 全局监听
   const heldKeys = useRef(new Set());

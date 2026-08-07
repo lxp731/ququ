@@ -1,4 +1,4 @@
-const { BrowserWindow } = require('electron');
+const { BrowserWindow, screen } = require('electron');
 const path = require('path');
 
 const PRELOAD = path.join(__dirname, '..', '..', 'preload.js');
@@ -11,6 +11,8 @@ class WindowManager {
     this.controlPanelWindow = null;
     this.historyWindow = null;
     this.settingsWindow = null;
+    this.floatingWindow = null;
+    this._floatingPos = null;  // 用户拖拽后记住的位置 {x, y}
     this._forceQuit = false;
   }
 
@@ -27,7 +29,7 @@ class WindowManager {
     this.mainWindow = new BrowserWindow({
       width: 420, height: 580,
       frame: true,
-      alwaysOnTop: true, resizable: true, skipTaskbar: true, icon: ICON,
+      resizable: true, skipTaskbar: true, icon: ICON,
       show: false,
       backgroundColor: '#0f172a',
       title: '蛐蛐 - 中文语音转文字',
@@ -78,7 +80,7 @@ class WindowManager {
   async createHistoryWindow() {
     if (this.historyWindow) { this.historyWindow.focus(); return this.historyWindow; }
     this.historyWindow = new BrowserWindow({
-      width: 1000, height: 700, show: false, alwaysOnTop: true,
+      width: 1000, height: 700, show: false,
       title: '转录历史 - 蛐蛐', icon: ICON,
       webPreferences: { nodeIntegration: false, contextIsolation: true, preload: PRELOAD },
     });
@@ -94,7 +96,7 @@ class WindowManager {
   async createSettingsWindow() {
     if (this.settingsWindow) { this.settingsWindow.focus(); return this.settingsWindow; }
     this.settingsWindow = new BrowserWindow({
-      width: 720, height: 640, show: false, alwaysOnTop: true,
+      width: 720, height: 640, show: false,
       title: '设置 - 蛐蛐', icon: ICON,
       webPreferences: { nodeIntegration: false, contextIsolation: true, preload: PRELOAD },
     });
@@ -130,6 +132,100 @@ class WindowManager {
   hideSettingsWindow() { this.settingsWindow?.hide(); }
   closeSettingsWindow() { this.settingsWindow?.close(); }
 
+  // ═══════════════════════════════════════════════════════════════
+  //  浮动三区预览窗
+  // ═══════════════════════════════════════════════════════════════
+  //
+  // 独立 frameless BrowserWindow，透明底、始终置顶、不抢焦点。
+  // 文字区域鼠标穿透（CSS pointer-events: none），顶部拖拽手柄可拖动。
+  //
+  // 默认位置：屏幕底部居中。可拖拽到任意位置，每次显示会回到默认位置。
+
+  async createFloatingWindow() {
+    if (this.floatingWindow) return this.floatingWindow;
+    this.floatingWindow = new BrowserWindow({
+      width: 620, height: 140,
+      frame: false, transparent: true, alwaysOnTop: true,
+      skipTaskbar: true, focusable: false, resizable: false,
+      show: false, hasShadow: false,
+      webPreferences: {
+        nodeIntegration: false, contextIsolation: true, preload: PRELOAD,
+        devTools: true,
+      },
+    });
+
+    if (IS_DEV) {
+      this.floatingWindow.loadURL('http://localhost:5173/floating.html');
+    } else {
+      this.floatingWindow.loadFile(path.join(__dirname, '..', '..', 'dist', 'floating.html'));
+    }
+
+    // 阻止键盘事件被浮动窗捕获
+    this.floatingWindow.webContents.on('before-input-event', (_e, input) => {
+      if (input.type === 'keyDown') _e.preventDefault();
+    });
+
+      // 拖拽后记住位置，下次显示时复用（仅在窗口可见时记录）
+    this.floatingWindow.on('move', () => {
+      if (this.floatingWindow && this.floatingWindow.isVisible()) {
+        const pos = this.floatingWindow.getPosition();
+        this._floatingPos = { x: pos[0], y: pos[1] };
+      }
+    });
+
+    this.floatingWindow.on('closed', () => { this.floatingWindow = null; });
+
+    return this.floatingWindow;
+  }
+
+  // 定位：优先使用用户拖拽记住的位置，否则默认屏幕底部居中
+  _positionFloating() {
+    if (!this.floatingWindow) return;
+    if (this._floatingPos) {
+      this.floatingWindow.setPosition(this._floatingPos.x, this._floatingPos.y);
+      return;
+    }
+    const { x, y, width, height } = screen.getPrimaryDisplay().workArea;
+    const [w, h] = this.floatingWindow.getSize();
+    const px = x + Math.round((width - w) / 2);
+    const py = y + height - h - 40;
+    this.floatingWindow.setPosition(px, py);
+  }
+
+  async showFloatingWindow() {
+    if (!this.floatingWindow) {
+      await this.createFloatingWindow();
+    }
+    this._positionFloating();
+    this.floatingWindow?.show();
+    this.floatingWindow?.webContents.send('floating-visibility-change', true);
+    this.floatingWindow?.setAlwaysOnTop(true);
+  }
+
+  hideFloatingWindow() {
+    this.floatingWindow?.webContents.send('floating-visibility-change', false);
+    // 10s 安全兜底，正常情况 hover 逻辑在 floating.html 里控制实际消失时机
+    setTimeout(() => { this.floatingWindow?.hide(); }, 10000);
+  }
+
+  updateFloatingPreedit(data) {
+    if (this.floatingWindow && !this.floatingWindow.isDestroyed()) {
+      this.floatingWindow.webContents.send('floating-preedit-update', data);
+    }
+  }
+
+  // JS 拖拽：接收 renderer 传来的位移增量
+  moveFloatingWindow(dx, dy) {
+    if (this.floatingWindow && !this.floatingWindow.isDestroyed()) {
+      const [x, y] = this.floatingWindow.getPosition();
+      this.floatingWindow.setPosition(x + dx, y + dy);
+    }
+  }
+
+  closeFloatingWindow() {
+    this.floatingWindow?.close();
+  }
+
   forceQuit() {
     this._forceQuit = true;
     this.closeAllWindows();
@@ -140,6 +236,7 @@ class WindowManager {
     this.controlPanelWindow?.close();
     this.historyWindow?.close();
     this.settingsWindow?.close();
+    this.floatingWindow?.close();
   }
 }
 
