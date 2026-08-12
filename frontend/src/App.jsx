@@ -374,6 +374,10 @@ function MainApp() {
     if (window.electronAPI?.updateFloatingPreedit) {
       window.electronAPI.updateFloatingPreedit({ green: green || '', yellow: yellow || '', red: red || '' });
     }
+    // 安全网：录音进行中但浮动窗因意外消失时，重新显示
+    if (isRecordingRef.current) {
+      window.electronAPI?.showFloatingWindow?.();
+    }
   }, []);
 
   const handleCommit = useCallback(async (text) => {
@@ -389,11 +393,13 @@ function MainApp() {
     setPreeditYellow('');
     setPreeditRed('');
     await safePaste(text);
-    // 全部提交完成，1.5s 后淡出消失
-    window.electronAPI?.updateFloatingPreedit?.({ green: '', yellow: '', red: '' });
-    setTimeout(() => {
-      window.electronAPI?.hideFloatingWindow?.();
-    }, 0);
+    // 只有录音真正停止后才隐藏浮动窗（防止 backend pipeline 在静默期误发 final）
+    if (!isRecordingRef.current) {
+      window.electronAPI?.updateFloatingPreedit?.({ green: '', yellow: '', red: '' });
+      setTimeout(() => {
+        window.electronAPI?.hideFloatingWindow?.();
+      }, 0);
+    }
   }, [safePaste]);
 
   const handleHotwordsUpdated = useCallback(async (count) => {
@@ -474,10 +480,12 @@ function MainApp() {
   const isRecProcessingRef = useRef(isRecProcessingActual);
   const startRef = useRef(startRecording);
   const stopRef = useRef(stopRecording);
+  /* eslint-disable react-hooks/immutability */
   useEffect(() => { isRecordingRef.current = isRecordingActual; });
   useEffect(() => { isRecProcessingRef.current = isRecProcessingActual; });
   useEffect(() => { startRef.current = startRecording; });
   useEffect(() => { stopRef.current = stopRecording; });
+  /* eslint-enable react-hooks/immutability */
 
   // Show floating preedit overlay when recording starts
   useEffect(() => {
