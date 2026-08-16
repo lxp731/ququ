@@ -2,110 +2,130 @@ const { app, globalShortcut, BrowserWindow, Menu } = require('electron');
 const { spawn } = require('child_process');
 const path = require('path');
 
-// 静默 Linux GPU VSync 无害警告
-if (process.platform === 'linux') {
-  app.commandLine.appendSwitch('disable-gpu-vsync');
+// 单实例锁: 防止多开 (双托盘/双快捷键/双 WS 客户端)
+if (!app.requestSingleInstanceLock()) {
+  app.quit();
+} else {
+  main();
 }
 
-// 启动 ydotoold 守护进程（Wayland 键盘模拟）
-function ensureYdotoolDaemon() {
-  if (process.platform !== 'linux') return;
-  const sock = '/run/user/' + process.getuid() + '/.ydotool_socket';
-  const { execSync } = require('child_process');
-  const fs = require('fs');
-  try {
-    execSync('pgrep -x ydotoold', { stdio: 'ignore' });
-    return; // 已在运行
-  } catch {}
-  // 清理僵尸 socket
-  try { fs.unlinkSync(sock); } catch {}
-  // 后台启动 daemon
-  try {
-    spawn('ydotoold', [], { detached: true, stdio: 'ignore' }).unref();
-  } catch (e) {
-    console.log('[main] ydotoold 启动失败:', e.message);
-  }
-}
-ensureYdotoolDaemon();
+function main() {
+  // 第二个实例启动时, 聚焦已有主窗口
+  app.on('second-instance', () => {
+    const win = BrowserWindow.getAllWindows()[0];
+    if (win) {
+      if (win.isMinimized()) win.restore();
+      win.show();
+      win.focus();
+    }
+  });
 
-const LogManager = require('./src/helpers/logManager');
-const EnvironmentManager = require('./src/helpers/environment');
-const WindowManager = require('./src/helpers/windowManager');
-const DatabaseManager = require('./src/helpers/database');
-const ClipboardManager = require('./src/helpers/clipboard');
-const FunASRManager = require('./src/helpers/funasrManager');
-const TrayManager = require('./src/helpers/tray');
-const HotkeyManager = require('./src/helpers/hotkeyManager');
-const IPCHandlers = require('./src/helpers/ipcHandlers');
-const KeyWatcher = require('./src/helpers/keyWatcher');
-
-const logger = new LogManager();
-const env = new EnvironmentManager();
-const wm = new WindowManager();
-const db = new DatabaseManager(logger);
-const clip = new ClipboardManager(logger);
-const funasr = new FunASRManager(logger);
-const tray = new TrayManager(logger);
-const hotkey = new HotkeyManager(logger);
-const keyWatcher = new KeyWatcher(logger);
-
-// 初始化数据库
-db.initialize(env.ensureDataDirectory());
-
-// 从数据库读取 FunASR 后端地址（用户可能在设置中修改过）
-const savedBaseUrl = db.getSetting('funasr_base_url');
-if (savedBaseUrl) funasr.setBaseUrl(savedBaseUrl);
-
-// 初始化 IPC
-new IPCHandlers({ databaseManager: db, clipboardManager: clip, funasrManager: funasr, windowManager: wm, hotkeyManager: hotkey, keyWatcher, logger });
-
-// 全局错误处理
-process.on('uncaughtException', (e) => { if (e.code !== 'EPIPE') logger.error('Uncaught Exception:', e); });
-process.on('unhandledRejection', (r) => logger.error('Unhandled Rejection:', r));
-
-async function startApp() {
-  logger.info('应用启动', { platform: process.platform, arch: process.arch, electron: process.versions.electron });
-
-  if (process.env.NODE_ENV === 'development') {
-    await new Promise(r => setTimeout(r, 2000));
+  // 静默 Linux GPU VSync 无害警告
+  if (process.platform === 'linux') {
+    app.commandLine.appendSwitch('disable-gpu-vsync');
   }
 
-  // macOS dock
-  if (process.platform === 'darwin' && app.dock) app.dock.show();
+  // 启动 ydotoold 守护进程（Wayland 键盘模拟）
+  function ensureYdotoolDaemon() {
+    if (process.platform !== 'linux') return;
+    const sock = '/run/user/' + process.getuid() + '/.ydotool_socket';
+    const { execSync } = require('child_process');
+    const fs = require('fs');
+    try {
+      execSync('pgrep -x ydotoold', { stdio: 'ignore' });
+      return; // 已在运行
+    } catch {}
+    // 清理僵尸 socket
+    try { fs.unlinkSync(sock); } catch {}
+    // 后台启动 daemon
+    try {
+      spawn('ydotoold', [], { detached: true, stdio: 'ignore' }).unref();
+    } catch (e) {
+      console.log('[main] ydotoold 启动失败:', e.message);
+    }
+  }
+  ensureYdotoolDaemon();
 
-  // 异步连接 FunASR 后端（非阻塞，失败不影��启动）
-  funasr.initializeAtStartup().catch(e => logger.warn('FunASR 后端暂不可用:', e.message));
+  const LogManager = require('./src/helpers/logManager');
+  const EnvironmentManager = require('./src/helpers/environment');
+  const WindowManager = require('./src/helpers/windowManager');
+  const DatabaseManager = require('./src/helpers/database');
+  const ClipboardManager = require('./src/helpers/clipboard');
+  const FunASRManager = require('./src/helpers/funasrManager');
+  const TrayManager = require('./src/helpers/tray');
+  const HotkeyManager = require('./src/helpers/hotkeyManager');
+  const IPCHandlers = require('./src/helpers/ipcHandlers');
+  const KeyWatcher = require('./src/helpers/keyWatcher');
 
-  // 创建窗口
-  try { await wm.createMainWindow(); logger.info('主窗口创建成功'); } catch (e) { logger.error('主窗口创建失败:', e); }
-  try { await wm.createSettingsWindow(); logger.info('设置窗口创建成功'); } catch (e) { logger.error('设置窗口创建失败:', e); }
-  try { await wm.createFloatingWindow(); logger.info('浮动预览窗创建成功'); } catch (e) { logger.error('浮动预览窗创建失败:', e); }
+  const logger = new LogManager();
+  const env = new EnvironmentManager();
+  const wm = new WindowManager();
+  const db = new DatabaseManager(logger);
+  const clip = new ClipboardManager(logger);
+  const funasr = new FunASRManager(logger);
+  const tray = new TrayManager(logger);
+  const hotkey = new HotkeyManager(logger);
+  const keyWatcher = new KeyWatcher(logger);
 
-  // 托盘
-  tray.setWindows(wm.mainWindow, wm.settingsWindow);
-  tray.setCreateSettingsCallback(() => wm.createSettingsWindow());
-  tray.setQuitCallback(() => { wm.forceQuit(); app.quit(); });
-  await tray.createTray();
+  // 初始化数据库
+  db.initialize(env.ensureDataDirectory());
 
-  logger.info('应用启动完成');
+  // 从数据库读取 FunASR 后端地址（用户可能在设置中修改过）
+  const savedBaseUrl = db.getSetting('funasr_base_url');
+  if (savedBaseUrl) funasr.setBaseUrl(savedBaseUrl);
+
+  // 初始化 IPC
+  new IPCHandlers({ databaseManager: db, clipboardManager: clip, funasrManager: funasr, windowManager: wm, hotkeyManager: hotkey, keyWatcher, logger });
+
+  // 全局错误处理
+  process.on('uncaughtException', (e) => { if (e.code !== 'EPIPE') logger.error('Uncaught Exception:', e); });
+  process.on('unhandledRejection', (r) => logger.error('Unhandled Rejection:', r));
+
+  async function startApp() {
+    logger.info('应用启动', { platform: process.platform, arch: process.arch, electron: process.versions.electron });
+
+    if (process.env.NODE_ENV === 'development') {
+      await new Promise(r => setTimeout(r, 2000));
+    }
+
+    // macOS dock
+    if (process.platform === 'darwin' && app.dock) app.dock.show();
+
+    // 异步连接 FunASR 后端（非阻塞，失败不影响启动）
+    funasr.initializeAtStartup().catch(e => logger.warn('FunASR 后端暂不可用:', e.message));
+
+    // 创建窗口
+    try { await wm.createMainWindow(); logger.info('主窗口创建成功'); } catch (e) { logger.error('主窗口创建失败:', e); }
+    try { await wm.createSettingsWindow(); logger.info('设置窗口创建成功'); } catch (e) { logger.error('设置窗口创建失败:', e); }
+    try { await wm.createFloatingWindow(); logger.info('浮动预览窗创建成功'); } catch (e) { logger.error('浮动预览窗创建失败:', e); }
+
+    // 托盘
+    tray.setWindows(wm.mainWindow, wm.settingsWindow);
+    tray.setCreateSettingsCallback(() => wm.createSettingsWindow());
+    tray.setQuitCallback(() => { wm.forceQuit(); app.quit(); });
+    await tray.createTray();
+
+    logger.info('应用启动完成');
+  }
+
+  app.whenReady().then(() => {
+    // 去掉默认菜单栏（File | Edit | View | Window | Help）
+    if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
+    return startApp();
+  });
+
+  app.on('window-all-closed', () => {
+    // 不退出，保留在托盘
+  });
+
+  app.on('activate', () => {
+    if (BrowserWindow.getAllWindows().length === 0) wm.createMainWindow();
+  });
+
+  app.on('will-quit', () => {
+    globalShortcut.unregisterAll();
+    keyWatcher.stop();
+    // 容器清理: 短超时 + 不阻塞退出 (will-quit 不等待 async handler)
+    funasr._runCompose(['down'], 15000).catch(() => {});
+  });
 }
-
-app.whenReady().then(() => {
-  // 去掉默认菜单栏（File | Edit | View | Window | Help）
-  if (process.platform !== 'darwin') Menu.setApplicationMenu(null);
-  return startApp();
-});
-
-app.on('window-all-closed', () => {
-  // 不退出，保留在托盘
-});
-
-app.on('activate', () => {
-  if (BrowserWindow.getAllWindows().length === 0) wm.createMainWindow();
-});
-
-app.on('will-quit', async () => {
-  globalShortcut.unregisterAll();
-  keyWatcher.stop();
-  try { await funasr._runCompose(['down']); } catch (_) {}
-});

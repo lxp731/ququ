@@ -5,8 +5,11 @@ import { toast, Toaster } from 'sonner';
 import { Search, Copy, Trash2, Download, Clock, History, FileText, ChevronRight } from 'lucide-react';
 import './index.css';
 
+const PAGE_SIZE = 50;
+
 const formatDate = (dateStr) => {
   const d = new Date(dateStr);
+  if (Number.isNaN(d.getTime())) return '未知时间';
   const now = new Date();
   const diff = Math.ceil(Math.abs(now - d) / (1000 * 60 * 60 * 24));
   const time = d.toLocaleTimeString('zh-CN', { hour: '2-digit', minute: '2-digit' });
@@ -19,25 +22,43 @@ const formatDate = (dateStr) => {
 const HistoryPage = () => {
   const [items, setItems] = useState([]);
   const [loading, setLoading] = useState(false);
+  const [loadingMore, setLoadingMore] = useState(false);
+  const [hasMore, setHasMore] = useState(false);
   const [search, setSearch] = useState('');
   const [selected, setSelected] = useState(null);
+  const [searching, setSearching] = useState(false);
 
-  const load = async () => {
+  const load = async (offset = 0, append = false) => {
     if (!window.electronAPI) return;
-    setLoading(true);
+    append ? setLoadingMore(true) : setLoading(true);
     try {
-      const r = await window.electronAPI.getTranscriptions(200, 0);
-      setItems(r || []);
+      const r = await window.electronAPI.getTranscriptions(PAGE_SIZE, offset);
+      const rows = r || [];
+      setItems(prev => append ? [...prev, ...rows] : rows);
+      setHasMore(rows.length >= PAGE_SIZE);
     } catch (_) { /* ignore */ }
-    finally { setLoading(false); }
+    finally { append ? setLoadingMore(false) : setLoading(false); }
   };
 
   // eslint-disable-next-line react-hooks/set-state-in-effect
-  useEffect(() => { load(); }, []);
+  useEffect(() => { load(0, false); }, []);
 
-  const filtered = search.trim()
-    ? items.filter(i => i.text?.includes(search) || i.raw_text?.includes(search) || i.processed_text?.includes(search))
-    : items;
+  // 搜索走主进程 SQLite 全文 (覆盖全部历史, 而非仅已加载子集)
+  useEffect(() => {
+    if (!window.electronAPI || !search.trim()) return;
+    let cancelled = false;
+    const t = setTimeout(async () => {
+      setSearching(true);
+      try {
+        const r = await window.electronAPI.searchTranscriptions(search.trim(), 200);
+        if (!cancelled) { setItems(r || []); setHasMore(false); }
+      } catch (_) { /* ignore */ }
+      finally { if (!cancelled) setSearching(false); }
+    }, 300);
+    return () => { cancelled = true; clearTimeout(t); };
+  }, [search]);
+
+  const filtered = items;
 
   const handleCopy = async (text) => {
     try {
@@ -83,8 +104,7 @@ const HistoryPage = () => {
               setSelected(null);
               toast.success('已清空所有记录');
             } catch (_) { toast.error('清空失败'); }
-          }} className="p-2 rounded-lg hover:bg-red-500/20 transition-colors" title="清空全部">
-            <Trash2 className="w-4 h-4 text-red-400/50" />
+          }} className="p-2 rounded-lg hover:bg-red-500/20 transition-colors" title="清空全部">            <Trash2 className="w-4 h-4 text-red-400/50" />
           </button>
           <button onClick={handleExport} className="p-2 rounded-lg hover:bg-white/10 transition-colors" title="导出">
             <Download className="w-4 h-4 text-white/50" />
@@ -119,8 +139,7 @@ const HistoryPage = () => {
           ) : (
             <div className="space-y-2">
               <AnimatePresence>
-                {filtered.map((item, idx) => (
-                  <motion.div
+                {filtered.map((item, idx) => (                  <motion.div
                     key={item.id}
                     initial={{ opacity: 0, y: 8 }}
                     animate={{ opacity: 1, y: 0 }}
@@ -192,6 +211,23 @@ const HistoryPage = () => {
                   </motion.div>
                 ))}
               </AnimatePresence>
+              {/* 加载更多 */}
+              {hasMore && !searching && (
+                <div className="flex justify-center pt-2">
+                  <button
+                    onClick={() => load(items.length, true)}
+                    disabled={loadingMore}
+                    className="px-4 py-2 text-xs rounded-lg bg-white/5 text-white/50 hover:bg-white/10 transition-colors disabled:opacity-50"
+                  >
+                    {loadingMore ? '加载中...' : '加载更多'}
+                  </button>
+                </div>
+              )}
+              {searching && (
+                <div className="flex justify-center pt-2">
+                  <div className="w-4 h-4 border-2 border-indigo-400/60 border-t-transparent rounded-full animate-spin" />
+                </div>
+              )}
             </div>
           )}
         </div>

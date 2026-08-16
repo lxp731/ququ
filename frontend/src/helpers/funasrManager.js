@@ -1,4 +1,4 @@
-const { exec, spawn } = require('child_process');
+const { execFile, spawn } = require('child_process');
 const path = require('path');
 
 class FunASRManager {
@@ -10,8 +10,8 @@ class FunASRManager {
     this.initializationPromise = null;
     this.baseUrl = process.env.FUNASR_API_URL || 'http://127.0.0.1:8000';
     this.composeDir = path.join(__dirname, '..', '..', '..');
-    this.containerName = 'ququ-funasr';
-    this._composeCmd = null;
+    this._composeCmd = null;      // ['podman', 'compose'] 或 ['docker', 'compose'] 或 ['podman-compose']
+    this._composeArgs = null;
     this._connecting = false;
   }
 
@@ -20,10 +20,6 @@ class FunASRManager {
       this.baseUrl = url.replace(/\/+$/, '');
       this.logger?.info?.('FunASR 后端地址已更新:', this.baseUrl);
     }
-  }
-
-  _isLocalUrl() {
-    return /127\.0\.0\.1|localhost/.test(this.baseUrl);
   }
 
   async _httpRequest(endpoint, opts = {}) {
@@ -37,24 +33,38 @@ class FunASRManager {
   }
 
   async _detectComposeCmd() {
-    if (this._composeCmd) return this._composeCmd;
-    for (const [cmd, ...args] of [['podman', 'compose', 'version'], ['docker', 'compose', 'version'], ['podman-compose', '--version']]) {
+    if (this._composeCmd) return { cmd: this._composeCmd, args: this._composeArgs };
+    for (const candidate of [
+      ['podman', ['compose', 'version']],
+      ['docker', ['compose', 'version']],
+      ['podman-compose', ['--version']],
+    ]) {
+      const [cmd, probeArgs] = candidate;
       try {
-        await new Promise((res, rej) => exec(`${cmd} ${args.join(' ')}`, { timeout: 5000 }, (e) => e ? rej(e) : res()));
-        this._composeCmd = `${cmd} ${args[0]}`;
-        return this._composeCmd;
+        await new Promise((res, rej) => {
+          execFile(cmd, probeArgs, { timeout: 5000 }, (e) => e ? rej(e) : res());
+        });
+        this._composeCmd = cmd;
+        this._composeArgs = cmd === 'podman-compose' ? [] : ['compose'];
+        return { cmd: this._composeCmd, args: this._composeArgs };
       } catch { continue; }
     }
     return null;
   }
 
-  _runCompose(args) {
-    return this._detectComposeCmd().then(cmd => {
-      if (!cmd) throw new Error('未找到可用的 compose 工具');
+  _runCompose(args, timeoutMs = 120000) {
+    return this._detectComposeCmd().then((comp) => {
+      if (!comp) throw new Error('未找到可用的 compose 工具');
       return new Promise((res, rej) => {
-        exec(`${cmd} ${args.join(' ')}`, { cwd: this.composeDir, timeout: 120000 }, (e, stdout, stderr) => {
-          e ? rej(new Error(stderr || e.message)) : res(stdout.trim());
-        });
+        const child = execFile(
+          comp.cmd, [...comp.args, ...args],
+          { cwd: this.composeDir, timeout: timeoutMs },
+          (e, stdout, stderr) => {
+            e ? rej(new Error(stderr || e.message)) : res(stdout.trim());
+          });
+        // 防御: execFile 自身超时后补 SIGTERM
+        const timer = setTimeout(() => { try { child.kill('SIGTERM'); } catch (_) { /* ignore */ } }, timeoutMs + 1000);
+        child.on('close', () => clearTimeout(timer));
       });
     });
   }
@@ -138,12 +148,12 @@ class FunASRManager {
       }
     }
 
-    // 回退到源码直接启动
-    const serverScript = path.join(composeDir, 'backend', 'funasr_server.py');
+    // 回退到源码直接启动 (server.py)
+    const serverScript = path.join(composeDir, 'backend', 'server.py');
     if (fs.existsSync(serverScript)) {
       try {
         this.logger?.info?.('源码启动后端...');
-        const proc = spawn('uv', ['run', 'python', 'funasr_server.py', '--port', '8000'], {
+        const proc = spawn('uv', ['run', 'python', 'server.py'], {
           cwd: path.join(composeDir, 'backend'),
           detached: true,
           stdio: 'ignore',
@@ -168,7 +178,7 @@ class FunASRManager {
     }
 
     this._connecting = false;
-    return { success: false, error: '未找到 docker-compose.yml 或 funasr_server.py' };
+    return { success: false, error: '未找到 docker-compose.yml 或 server.py' };
   }
 
   // ── 应用启动时调用，不阻塞 ──
@@ -218,12 +228,32 @@ class FunASRManager {
     else if (audioData?.buffer) buf = Buffer.from(audioData.buffer);
     else throw new Error(`不支持的音频数据类型: ${typeof audioData}`);
 
+    // 大小上限 (与 ipcHandlers 双重防护)
+    if (buf.length > 50 * 1024 * 1024) {
+      throw new Error('音频过大 (最大 50MB)');
+    }
+
     const formData = new FormData();
     formData.append('audio', new File([buf], 'audio.wav', { type: 'audio/wav' }), 'audio.wav');
     formData.append('options', JSON.stringify(options));
     const result = await this._httpRequest('/transcribe', { method: 'POST', formData, timeout: 120000 });
     if (!result.success) throw new Error(result.error || '转录失败');
     return { success: true, text: (result.text || '').trim(), raw_text: result.raw_text || '', confidence: result.confidence || 0, language: result.language || 'zh-CN', duration: result.duration || 0 };
+  }
+
+  // 按名下载/补全模型 → 后端 POST /models/download (语义与通道名一致)
+  async downloadModel(_name) {
+    this.logger?.info?.('触发模型下载/补全 (后端处理):', _name || '全部');
+    if (this.serverReady) {
+      try {
+        const r = await this._httpRequest('/models/download', { method: 'POST', timeout: 300000 });
+        return { success: !!r.success, error: r.error, message: r.message };
+      } catch (e) {
+        this.logger?.warn?.('后端模型下载接口不可用, 回退重启:', e.message);
+      }
+    }
+    // 后端未就绪 → 走容器启动 (entrypoint 会自动下载模型)
+    return this.restartServer();
   }
 
   async checkModelFiles() {
@@ -250,7 +280,8 @@ class FunASRManager {
 
   async restartServer() {
     try {
-      await this._runCompose(['down']);
+      // down 用短超时, 防止容器挂起时应用退出被拖 2 分钟
+      await this._runCompose(['down'], 15000);
       this.serverReady = false; this.modelsInitialized = false; this.modelsDownloaded = false;
       return this.startLocalBackend();
     } catch (e) {

@@ -4,7 +4,7 @@ npm-debug.log*
 yarn-debug.log*
 yarn-error.log*
 pnpm-debug.log*
-yarn.lock*
+# 注意: 锁文件 (pnpm-lock.yaml / uv.lock) 必须提交, 不忽略
 
 
 # Production builds

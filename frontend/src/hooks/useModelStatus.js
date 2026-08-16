@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 
 const isOtherPage = () => {
   const p = new URLSearchParams(window.location.search);
@@ -65,9 +65,18 @@ export const useModelStatus = () => {
     }
   }, []);
 
+  // 未就绪时轻量轮询 (10s), 后端事后启动/模型加载完成时自动刷新
+  const stageRef = useRef('checking');
+  useEffect(() => { stageRef.current = status.stage; }, [status.stage]);
+
   useEffect(() => {
     if (isOtherPage()) return;
     checkStatus();
+    const t = setInterval(() => {
+      if (['ready', 'error', 'no_api'].includes(stageRef.current)) return;
+      checkStatus();
+    }, 10000);
+    return () => clearInterval(t);
   }, [checkStatus]);
 
   const startLocalBackend = useCallback(async () => {

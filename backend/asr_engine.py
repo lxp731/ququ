@@ -11,12 +11,18 @@
 import asyncio
 import logging
 import re
+import threading
 import time
 from collections.abc import Callable
 
 import numpy as np
 
 logger = logging.getLogger("ququ.asr")
+
+# 音频缓冲水位上限 (约 10 分钟 @16k/16bit/mono), 超限丢最旧
+MAX_AUDIO_BUFFER_BYTES = 20 * 1024 * 1024
+# _finalized_audio 仅用于调试, 保留最近 2MB 即可
+MAX_FINALIZED_BYTES = 2 * 1024 * 1024
 
 # ══════════════════════════════════════════════════════
 # GPU 检测（移植自 YuHuang）
@@ -136,9 +142,13 @@ class ASREngine:
         self._vad_name = vad_model
         self._punc_name = punc_model
 
-        # ── 音频缓冲 ──
+        # ── 音频缓冲 (executor 线程与事件循环共享, 需加锁) ──
         self._audio_buffer = bytearray()
         self._finalized_audio = bytearray()  # 已裁剪 (debug)
+        self._audio_lock = threading.Lock()
+
+        # ── 离线模型串行锁 (SenseVoice/fallback 非线程安全) ──
+        self._offline_lock = threading.Lock()
 
         # ── 流式解码状态 ──
         self._stream_cache: dict = {}
@@ -277,7 +287,9 @@ class ASREngine:
     # ══════════════════════════════════════════════════
 
     def reset(self):
-        self._audio_buffer = bytearray()
+        with self._audio_lock:
+            self._audio_buffer = bytearray()
+            self._finalized_audio = bytearray()
         self._stream_cache = {}
         self._stream_audio_offset = 0
         self._stream_generation += 1
@@ -290,6 +302,14 @@ class ASREngine:
         self._simple_append = False
         self._new_audio_event.clear()
 
+    # ── PTT 状态 (由 server.py 管理, 断连时清理) ──
+
+    def set_ptt_active(self, active: bool):
+        self._ptt_active = bool(active)
+
+    def is_ptt_active(self) -> bool:
+        return self._ptt_active
+
     def trim_committed_audio(self, char_count: int, commit_text: str = "",
                              remaining_text: str = ""):
         """裁剪已提交部分对应的音频, 实现增量离线纠正。
@@ -300,58 +320,62 @@ class ASREngine:
         if not char_count or not self._audio_buffer:
             return
 
-        audio_bytes = len(self._audio_buffer)
-        audio_samples = audio_bytes // 2
+        with self._audio_lock:
+            audio_bytes = len(self._audio_buffer)
+            audio_samples = audio_bytes // 2
 
-        # 转写滞后余量: 尾部 0.6s 音频不参与比例分配
-        LAG_MARGIN_SAMPLES = int(0.6 * self.sample_rate)
-        effective_samples = max(0, audio_samples - LAG_MARGIN_SAMPLES)
+            # 转写滞后余量: 尾部 0.6s 音频不参与比例分配
+            LAG_MARGIN_SAMPLES = int(0.6 * self.sample_rate)
+            effective_samples = max(0, audio_samples - LAG_MARGIN_SAMPLES)
 
-        def _char_weight(c: str) -> float:
-            if c.isascii():
-                return 0.3 if c.isalnum() else 0.0
-            return 1.0
+            def _char_weight(c: str) -> float:
+                if c.isascii():
+                    return 0.3 if c.isalnum() else 0.0
+                return 1.0
 
-        if commit_text:
-            committed_weight = sum(_char_weight(c) for c in commit_text)
-        else:
-            committed_weight = char_count
+            if commit_text:
+                committed_weight = sum(_char_weight(c) for c in commit_text)
+            else:
+                committed_weight = char_count
 
-        if commit_text and remaining_text:
-            total_weight = committed_weight + sum(
-                _char_weight(c) for c in remaining_text)
-            total_weight = max(1.0, total_weight)
-        elif self._accumulated_raw:
-            total_weight = sum(_char_weight(c) for c in self._accumulated_raw)
-            total_weight = max(1.0, total_weight)
-        else:
-            total_weight = max(1, char_count)
+            if commit_text and remaining_text:
+                total_weight = committed_weight + sum(
+                    _char_weight(c) for c in remaining_text)
+                total_weight = max(1.0, total_weight)
+            elif self._accumulated_raw:
+                total_weight = sum(
+                    _char_weight(c) for c in self._accumulated_raw)
+                total_weight = max(1.0, total_weight)
+            else:
+                total_weight = max(1, char_count)
 
-        weight_ratio = min(1.0, committed_weight / total_weight)
-        remove_samples = int(effective_samples * weight_ratio)
-        remove_bytes = remove_samples * 2
-        remove_bytes = min(remove_bytes, audio_bytes)
+            weight_ratio = min(1.0, committed_weight / total_weight)
+            remove_samples = int(effective_samples * weight_ratio)
+            remove_bytes = remove_samples * 2
+            remove_bytes = min(remove_bytes, audio_bytes)
 
-        if remove_bytes <= 0:
-            return
+            if remove_bytes <= 0:
+                return
 
-        self._finalized_audio.extend(self._audio_buffer[:remove_bytes])
-        del self._audio_buffer[:remove_bytes]
+            self._finalized_audio.extend(self._audio_buffer[:remove_bytes])
+            if len(self._finalized_audio) > MAX_FINALIZED_BYTES:
+                del self._finalized_audio[:-MAX_FINALIZED_BYTES]
+            del self._audio_buffer[:remove_bytes]
 
-        self._stream_audio_offset = max(
-            0, self._stream_audio_offset - (remove_bytes // 2))
+            self._stream_audio_offset = max(
+                0, self._stream_audio_offset - (remove_bytes // 2))
 
-        if remaining_text:
-            self._accumulated_raw = remaining_text
-        elif self._accumulated_raw and char_count <= len(self._accumulated_raw):
-            self._accumulated_raw = self._accumulated_raw[char_count:]
-        else:
-            self._accumulated_raw = ""
+            if remaining_text:
+                self._accumulated_raw = remaining_text
+            elif self._accumulated_raw and char_count <= len(self._accumulated_raw):
+                self._accumulated_raw = self._accumulated_raw[char_count:]
+            else:
+                self._accumulated_raw = ""
 
-        self._offline_last_text_len = max(
-            0, self._offline_last_text_len - char_count)
-        self._offline_last_audio_samples = max(
-            0, len(self._audio_buffer) // 2)
+            self._offline_last_text_len = max(
+                0, self._offline_last_text_len - char_count)
+            self._offline_last_audio_samples = max(
+                0, len(self._audio_buffer) // 2)
 
         # 裁剪后重置流式缓存
         self._stream_cache = {}
@@ -372,8 +396,20 @@ class ASREngine:
     # ══════════════════════════════════════════════════
 
     async def process_audio(self, pcm_data: bytes):
-        """接收音频数据 (非阻塞: 只积累缓冲, 触发后台处理)。"""
-        self._audio_buffer.extend(pcm_data)
+        """接收音频数据 (非阻塞: 只积累缓冲, 触发后台处理)。
+
+        带水位上限: 超限时丢弃最旧数据, 防止长时间会话内存无界增长。
+        """
+        if not pcm_data:
+            return
+        with self._audio_lock:
+            self._audio_buffer.extend(pcm_data)
+            overflow = len(self._audio_buffer) - MAX_AUDIO_BUFFER_BYTES
+            if overflow > 0:
+                del self._audio_buffer[:overflow]
+                logger.warning(
+                    "Audio buffer overflow: dropped %d bytes (cap %d)",
+                    overflow, MAX_AUDIO_BUFFER_BYTES)
         if self._models_loaded:
             self._new_audio_event.set()
 
@@ -539,37 +575,41 @@ class ASREngine:
     # ══════════════════════════════════════════════════
 
     def _run_offline_quick(self) -> str:
-        buf_snapshot = bytes(self._audio_buffer)
+        with self._audio_lock:
+            buf_snapshot = bytes(self._audio_buffer)
         if len(buf_snapshot) < 1600:
             return ""
         audio_np = np.frombuffer(buf_snapshot, dtype=np.int16)
         audio_float = audio_np.astype(np.float32) / 32768.0
         audio_float = _preprocess_audio(audio_float)
 
-        try:
-            if self._offline_model:
-                res = self._offline_model.generate(
-                    input=audio_float,
-                    language="zh",
-                    use_itn=True,
-                    hotword=self._hotwords,
-                )
+        # 离线模型非线程安全: 串行化 (与 _transcribe_final / 周期性纠正互斥)
+        with self._offline_lock:
+            try:
+                if self._offline_model:
+                    res = self._offline_model.generate(
+                        input=audio_float,
+                        language="zh",
+                        use_itn=True,
+                        hotword=self._hotwords,
+                    )
+                    if res and len(res) > 0:
+                        raw = res[0].get("text", "")
+                        text = _clean_sense_voice_text(raw)
+                        if text:
+                            return text
+
+                # fallback
+                if self._fallback_model is None:
+                    return ""
+                res = self._fallback_model.generate(
+                    input=audio_float, hotword=self._hotwords)
                 if res and len(res) > 0:
-                    raw = res[0].get("text", "")
-                    text = _clean_sense_voice_text(raw)
+                    text = (res[0].get("text", "") or "").strip()
                     if text:
                         return text
-
-            # fallback
-            if self._fallback_model is None:
-                return ""
-            res = self._fallback_model.generate(input=audio_float, hotword=self._hotwords)
-            if res and len(res) > 0:
-                text = (res[0].get("text", "") or "").strip()
-                if text:
-                    return text
-        except Exception as e:  # noqa: BLE001
-            logger.warning("Offline quick ASR failed: %s", e)
+            except Exception as e:  # noqa: BLE001
+                logger.warning("Offline quick ASR failed: %s", e)
         return ""
 
     def _sync_streaming_from_offline(self):
@@ -594,19 +634,19 @@ class ASREngine:
     # ══════════════════════════════════════════════════
 
     def _transcribe_partial(self) -> str:
-        if not self._models_loaded or len(self._audio_buffer) < 800:
-            return ""
+        with self._audio_lock:
+            if not self._models_loaded or len(self._audio_buffer) < 800:
+                return ""
+            buf_len_snapshot = len(self._audio_buffer)
+            byte_offset = self._stream_audio_offset * 2
+            gen_snapshot = self._stream_generation
 
-        buf_len_snapshot = len(self._audio_buffer)
-        byte_offset = self._stream_audio_offset * 2
-        gen_snapshot = self._stream_generation
+            if byte_offset >= buf_len_snapshot:
+                return ""
 
-        if byte_offset >= buf_len_snapshot:
-            return ""
-
-        MAX_BYTES = self.sample_rate * 3 * 2  # 最多 3s 音频
-        process_end = min(byte_offset + MAX_BYTES, buf_len_snapshot)
-        new_bytes = bytes(self._audio_buffer[byte_offset:process_end])
+            MAX_BYTES = self.sample_rate * 3 * 2  # 最多 3s 音频
+            process_end = min(byte_offset + MAX_BYTES, buf_len_snapshot)
+            new_bytes = bytes(self._audio_buffer[byte_offset:process_end])
 
         if len(new_bytes) < 800:
             return ""
@@ -760,7 +800,8 @@ class ASREngine:
         return ""
 
     def _transcribe_final(self) -> str:
-        audio_np = np.frombuffer(bytes(self._audio_buffer), dtype=np.int16)
+        with self._audio_lock:
+            audio_np = np.frombuffer(bytes(self._audio_buffer), dtype=np.int16)
         if len(audio_np) < 160:
             return ""
         audio_float = audio_np.astype(np.float32) / 32768.0
@@ -769,43 +810,46 @@ class ASREngine:
         audio_duration = len(audio_float) / self.sample_rate
         logger.info("Final offline ASR: %.1fs audio", audio_duration)
 
-        try:
-            if self._offline_model:
-                res = self._offline_model.generate(
-                    input=audio_float,
-                    language="zh",
-                    use_itn=True,
-                    hotword=self._hotwords,
-                )
-                if res and len(res) > 0:
-                    raw = res[0].get("text", "")
-                    text = _clean_sense_voice_text(raw)
-                    if text:
-                        return text
-                logger.info("SenseVoice empty, fallback to paraformer")
+        with self._offline_lock:
+            try:
+                if self._offline_model:
+                    res = self._offline_model.generate(
+                        input=audio_float,
+                        language="zh",
+                        use_itn=True,
+                        hotword=self._hotwords,
+                    )
+                    if res and len(res) > 0:
+                        raw = res[0].get("text", "")
+                        text = _clean_sense_voice_text(raw)
+                        if text:
+                            return text
+                    logger.info("SenseVoice empty, fallback to paraformer")
 
-            if self._fallback_model is None:
+                if self._fallback_model is None:
+                    return ""
+                res = self._fallback_model.generate(
+                    input=audio_float, hotword=self._hotwords)
+                if not res or len(res) == 0:
+                    return ""
+
+                text = (res[0].get("text", "") or "").strip()
+                if not text:
+                    return ""
+
+                if len(text) <= 500 and self._punc_model is not None:
+                    try:
+                        punc_res = self._punc_model.generate(input=text)
+                        if punc_res and len(punc_res) > 0:
+                            text = punc_res[0].get("text", text)
+                    except Exception as e:  # noqa: BLE001
+                        logger.warning(
+                            "Punctuation restoration failed: %s", e)
+
+                return text
+            except Exception:
+                logger.exception("Final transcription error")
                 return ""
-            res = self._fallback_model.generate(input=audio_float, hotword=self._hotwords)
-            if not res or len(res) == 0:
-                return ""
-
-            text = (res[0].get("text", "") or "").strip()
-            if not text:
-                return ""
-
-            if len(text) <= 500 and self._punc_model is not None:
-                try:
-                    punc_res = self._punc_model.generate(input=text)
-                    if punc_res and len(punc_res) > 0:
-                        text = punc_res[0].get("text", text)
-                except Exception as e:  # noqa: BLE001
-                    logger.warning("Punctuation restoration failed: %s", e)
-
-            return text
-        except Exception as e:
-            logger.error("Final transcription error: %s", e, exc_info=True)  # noqa: G201
-            return ""
 
     @property
     def offline_busy(self) -> bool:

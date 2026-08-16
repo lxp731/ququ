@@ -13,6 +13,7 @@ class WindowManager {
     this.settingsWindow = null;
     this.floatingWindow = null;
     this._floatingPos = null;  // 用户拖拽后记住的位置 {x, y}
+    this._floatingHideTimer = null; // 延迟隐藏定时器句柄
     this._forceQuit = false;
   }
 
@@ -22,6 +23,24 @@ class WindowManager {
     } else {
       w.loadFile(path.join(__dirname, '..', '..', 'dist', prodPath), query ? { query } : undefined);
     }
+  }
+
+  // 安全守卫: 阻止窗口导航到任意 URL / 打开新窗口
+  _harden(w) {
+    w.webContents.setWindowOpenHandler(({ url }) => {
+      // 只允许本应用页面; 其余一律拒绝
+      if (url.startsWith('file://') || url.startsWith('http://localhost:') || url.startsWith('http://127.0.0.1:')) {
+        return { action: 'allow' };
+      }
+      return { action: 'deny' };
+    });
+    w.webContents.on('will-navigate', (event, url) => {
+      const current = w.webContents.getURL();
+      if (url === current) return;
+      if (!(url.startsWith('file://') || url.startsWith('http://localhost:') || url.startsWith('http://127.0.0.1:'))) {
+        event.preventDefault();
+      }
+    });
   }
 
   async createMainWindow() {
@@ -34,11 +53,12 @@ class WindowManager {
       backgroundColor: '#0f172a',
       title: '蛐蛐 - 中文语音转文字',
       webPreferences: {
-        nodeIntegration: false, contextIsolation: true, preload: PRELOAD,
-        devTools: true,
+        nodeIntegration: false, contextIsolation: true, sandbox: true, preload: PRELOAD,
+        devTools: IS_DEV,
       },
     });
     this._load(this.mainWindow, 'http://localhost:5173', 'index.html');
+    this._harden(this.mainWindow);
 
     this.mainWindow.once('ready-to-show', () => {
       this.mainWindow?.show();
@@ -149,8 +169,8 @@ class WindowManager {
       skipTaskbar: true, focusable: false, resizable: false,
       show: false, hasShadow: false,
       webPreferences: {
-        nodeIntegration: false, contextIsolation: true, preload: PRELOAD,
-        devTools: true,
+        nodeIntegration: false, contextIsolation: true, sandbox: true, preload: PRELOAD,
+        devTools: IS_DEV,
       },
     });
 
@@ -196,6 +216,11 @@ class WindowManager {
     if (!this.floatingWindow) {
       await this.createFloatingWindow();
     }
+    // 取消可能挂起的隐藏定时器, 防止 10s 后误隐藏
+    if (this._floatingHideTimer) {
+      clearTimeout(this._floatingHideTimer);
+      this._floatingHideTimer = null;
+    }
     this._positionFloating();
     this.floatingWindow?.show();
     this.floatingWindow?.webContents.send('floating-visibility-change', true);
@@ -205,7 +230,11 @@ class WindowManager {
   hideFloatingWindow() {
     this.floatingWindow?.webContents.send('floating-visibility-change', false);
     // 10s 安全兜底，正常情况 hover 逻辑在 floating.html 里控制实际消失时机
-    setTimeout(() => { this.floatingWindow?.hide(); }, 10000);
+    if (this._floatingHideTimer) clearTimeout(this._floatingHideTimer);
+    this._floatingHideTimer = setTimeout(() => {
+      this._floatingHideTimer = null;
+      this.floatingWindow?.hide();
+    }, 10000);
   }
 
   updateFloatingPreedit(data) {

@@ -533,6 +533,7 @@ class PTTPipeline:
         self._committed_tail: str = ""
         self._refine_task: asyncio.Task | None = None
         self._finalizing: bool = False
+        self._pending_tasks: set[asyncio.Task] = set()
 
     def reset(self):
         saved_trim_cb = self.buffer._trim_audio_callback
@@ -833,7 +834,10 @@ class PTTPipeline:
                 await self._broadcast({"type": "commit", "text": text})
                 await self._update_display()
             try:
-                asyncio.create_task(_push())
+                task = asyncio.create_task(_push())
+                # 追踪 fire-and-forget 任务, 防止 "Task was destroyed but pending"
+                self._pending_tasks.add(task)
+                task.add_done_callback(self._pending_tasks.discard)
             except RuntimeError:
                 pass
 
@@ -843,8 +847,8 @@ class PTTPipeline:
                 try:
                     if not self._finalizing:
                         self.buffer.emergency_check()
-                except Exception:  # noqa: BLE001, S110
-                    pass
+                except Exception:
+                    logger.exception("Emergency check error")
                 await asyncio.sleep(1.0)
         self._emergency_timer = asyncio.create_task(tick())
 

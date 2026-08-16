@@ -20,6 +20,15 @@ import httpx
 logger = logging.getLogger("ququ.llm")
 
 
+def _mask_secret(secret: str) -> str:
+    """日志安全: 只保留末 4 位, 其余打码。"""
+    if not secret:
+        return "(empty)"
+    if len(secret) <= 4:
+        return "****"
+    return f"****{secret[-4:]}"
+
+
 class LLMOptimizer:
     """调用 OpenAI 兼容 API 校对语音识别文本。"""
 
@@ -62,7 +71,11 @@ class LLMOptimizer:
                     self._think_off_idx = 0
                     self._think_warned = False
                 setattr(self, key, value)
-                logger.info("LLM config: %s=%s", key, value)
+                # 安全: api_key 绝不写入日志, 其余字段正常记录
+                if key == "api_key":
+                    logger.info("LLM config: api_key updated (%s)", _mask_secret(value))
+                else:
+                    logger.info("LLM config: %s=%s", key, value)
 
     async def optimize(
         self,

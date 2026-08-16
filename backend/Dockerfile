@@ -30,8 +30,9 @@ RUN pip install --no-cache-dir uv \
 
 ENV UV_LINK_MODE=copy
 
-COPY pyproject.toml .
-RUN uv sync --no-dev --no-editable
+# 锁定文件: 保证镜像构建可复现 (uv sync 使用 --locked 拒绝漂移)
+COPY pyproject.toml uv.lock ./
+RUN uv sync --locked --no-dev --no-editable
 
 # ── 运行阶段 ──
 FROM python:3.14-slim
@@ -66,6 +67,12 @@ ENV DAMO_ROOT=/models/hub/damo
 ENV QUQU_TMP_DIR=/tmp
 ENV FUNASR_HOST=0.0.0.0
 ENV FUNASR_PORT=8000
+
+# 非 root 运行 (最小权限; 模型缓存卷需属主与 uid 1000 一致)
+RUN useradd --create-home --uid 1000 ququ \
+    && mkdir -p /models /tmp/ququ_logs \
+    && chown -R ququ:ququ /models /tmp/ququ_logs /app
+USER ququ
 
 EXPOSE 8000
 

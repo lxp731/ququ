@@ -25,9 +25,11 @@ const SAMPLE_RATE = 16000;
 const CHUNK_MS = 100;
 const CHUNK_SIZE = Math.floor(SAMPLE_RATE * CHUNK_MS / 1000) * 2;
 const PING_INTERVAL = 15000;       // 心跳间隔 15s
-const RECONNECT_MAX = 5;           // 最大重连次数
+const RECONNECT_MAX = 8;           // 最大连续重连次数 (0 = 无限)
 const RECONNECT_BASE_MS = 1000;    // 重连基础延迟
+const RECONNECT_MAX_DELAY_MS = 30000; // 退避上限
 const CONNECT_TIMEOUT = 5000;      // 连接超时
+const MAX_MESSAGE_BYTES = 1024 * 1024; // 单条入站消息上限 1MB
 
 function floatTo16BitPCM(float32Array) {
     const buffer = new ArrayBuffer(float32Array.length * 2);
@@ -47,14 +49,23 @@ class StreamingSession {
         this._streamingLoaded = false;
         this._reconnectAttempts = 0;
         this._reconnecting = false;
+        this._stopped = false;
         this._pingTimer = null;
+        this._reconnectTimer = null;
         this._pongReceived = true;
         this._listeners = {};
+        this._connectPromise = null;
     }
 
     // ── Events ──
 
     on(event, fn) { (this._listeners[event] ||= []).push(fn); }
+    off(event, fn) {
+        const list = this._listeners[event];
+        if (!list) return;
+        const i = list.indexOf(fn);
+        if (i >= 0) list.splice(i, 1);
+    }
     _emit(event, data) {
         (this._listeners[event] || []).forEach(fn => {
             try { fn(data); } catch (e) { console.error('[StreamingSession]', event, e); }
@@ -64,24 +75,30 @@ class StreamingSession {
     // ── Connection ──
 
     async start() {
+        if (this._stopped) this._stopped = false;
         this._reconnectAttempts = 0;
-        return this._connect();
+        return this._ensureConnect();
     }
 
-    async _connect() {
-        return new Promise((resolve, reject) => {
-            if (this._reconnectAttempts >= RECONNECT_MAX) {
-                reject(new Error(`WebSocket reconnect limit (${RECONNECT_MAX}) exceeded`));
-                return;
-            }
+    // 单一连接调度器: 并发调用共享同一 in-flight promise
+    _ensureConnect() {
+        if (this._connectPromise) return this._connectPromise;
+        this._connectPromise = this._connect().finally(() => { this._connectPromise = null; });
+        return this._connectPromise;
+    }
+
+    _connect() {
+        return new Promise((resolve) => {
+            if (this._stopped) { resolve(false); return; }
 
             const ws = new WebSocket(this._wsUrl);
             ws.binaryType = 'arraybuffer';
 
             const timeoutId = setTimeout(() => {
                 if (!this._ready) {
-                    ws.close();
-                    reject(new Error('WebSocket connection timeout'));
+                    try { ws.close(); } catch (_) { /* ignore */ }
+                    this._scheduleReconnect();
+                    resolve(false);
                 }
             }, CONNECT_TIMEOUT);
 
@@ -93,45 +110,68 @@ class StreamingSession {
                 this._reconnecting = false;
                 this._startHeartbeat();
                 this._emit('status', { connected: true });
-                resolve();
+                resolve(true);
             };
 
             ws.onmessage = (event) => {
-                if (typeof event.data === 'string') {
-                    try {
-                        const msg = JSON.parse(event.data);
-                        this._handleMessage(msg);
-                    } catch (_) { /* ignore */ }
+                if (typeof event.data !== 'string') return;
+                // 入站消息大小限制: 防恶意/异常后端打爆渲染进程内存
+                if (event.data.length > MAX_MESSAGE_BYTES) {
+                    console.warn(`[StreamingSession] oversized message (${event.data.length} bytes), closing`);
+                    this.stop();
+                    return;
                 }
+                try {
+                    const msg = JSON.parse(event.data);
+                    this._handleMessage(msg);
+                } catch (_) { /* ignore */ }
             };
 
             ws.onerror = () => {
                 clearTimeout(timeoutId);
                 this._emit('error', { message: 'WebSocket error' });
-                if (!this._reconnecting) {
-                    reject(new Error('WebSocket connection failed'));
-                }
             };
 
             ws.onclose = (e) => {
                 clearTimeout(timeoutId);
+                const wasReady = this._ready;
                 this._ready = false;
                 this._ws = null;
                 this._stopHeartbeat();
                 this._emit('status', { connected: false, code: e.code });
 
-                // 自动重连
-                if (!this._reconnecting && e.code !== 1000) {
-                    this._reconnectAttempts++;
-                    this._reconnecting = true;
-                    const delay = RECONNECT_BASE_MS * Math.pow(2, this._reconnectAttempts - 1);
-                    console.log(`[StreamingSession] Reconnecting in ${delay}ms (attempt ${this._reconnectAttempts}/${RECONNECT_MAX})`);
-                    setTimeout(() => {
-                        this._connect().catch(() => { /* ignore */ });
-                    }, delay);
+                // 主动关闭 (stop) 不重连
+                if (this._stopped) { resolve(false); return; }
+                // 失败即重试: 任何非 1000 关闭都排程下一次 (受 RECONNECT_MAX 限制)
+                if (e.code !== 1000 || !wasReady) {
+                    this._scheduleReconnect();
                 }
+                resolve(false);
             };
         });
+    }
+
+    _scheduleReconnect() {
+        if (this._stopped) return;
+        if (this._reconnectTimer) return; // 已排程
+        if (RECONNECT_MAX > 0 && this._reconnectAttempts >= RECONNECT_MAX) {
+            this._reconnecting = false;
+            this._emit('error', { message: `WebSocket 重连失败 (已达上限 ${RECONNECT_MAX})` });
+            return;
+        }
+        this._reconnecting = true;
+        const delay = Math.min(
+            RECONNECT_BASE_MS * Math.pow(2, this._reconnectAttempts),
+            RECONNECT_MAX_DELAY_MS);
+        this._reconnectAttempts++;
+        console.log(`[StreamingSession] Reconnecting in ${delay}ms (attempt ${this._reconnectAttempts}/${RECONNECT_MAX || '∞'})`);
+        this._reconnectTimer = setTimeout(() => {
+            this._reconnectTimer = null;
+            if (this._stopped) return;
+            this._ensureConnect().then(ok => {
+                if (!ok) this._reconnecting = false;
+            });
+        }, delay);
     }
 
     _handleMessage(msg) {
@@ -200,16 +240,23 @@ class StreamingSession {
         this._pingTimer = setInterval(() => {
             if (!this._pongReceived) {
                 console.warn('[StreamingSession] Ping timeout, reconnecting...');
-                this.stop();
-                this._reconnectAttempts++;
-                this._reconnecting = true;
-                const delay = RECONNECT_BASE_MS * Math.pow(2, this._reconnectAttempts - 1);
-                setTimeout(() => this._connect().catch(() => { /* ignore */ }), delay);
+                this._reconnectByHeartbeat();
                 return;
             }
             this._pongReceived = false;
             this.sendCommand({ command: 'ping' });
         }, PING_INTERVAL);
+    }
+
+    _reconnectByHeartbeat() {
+        this._stopHeartbeat();
+        const oldWs = this._ws;
+        this._ws = null;
+        this._ready = false;
+        try { oldWs?.close(1000); } catch (_) { /* ignore */ }
+        // 心跳超时视为连接失效 → 走统一重连调度
+        this._reconnectAttempts = Math.max(1, this._reconnectAttempts);
+        this._scheduleReconnect();
     }
 
     _stopHeartbeat() {
@@ -225,11 +272,10 @@ class StreamingSession {
         if (!this._ws || !this._ready) return;
         if (this._ws.readyState !== WebSocket.OPEN) return;
         if (chunk instanceof Uint8Array) {
-            this._ws.send(chunk.buffer);
+            // 视图切片: 只发送视图内的字节, 防止 byteOffset 时多发包头字节
+            this._ws.send(new Uint8Array(chunk.buffer, chunk.byteOffset, chunk.byteLength));
         } else if (chunk instanceof ArrayBuffer) {
             this._ws.send(chunk);
-        } else if (ArrayBuffer.isView(chunk)) {
-            this._ws.send(chunk.buffer);
         }
     }
 
@@ -263,8 +309,13 @@ class StreamingSession {
     // ── Cleanup ──
 
     stop() {
+        this._stopped = true;
         this._stopHeartbeat();
         this._reconnecting = false;
+        if (this._reconnectTimer) {
+            clearTimeout(this._reconnectTimer);
+            this._reconnectTimer = null;
+        }
         if (this._ws) {
             this._ws.close(1000);
             this._ws = null;

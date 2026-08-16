@@ -141,24 +141,21 @@ const SettingsPage = () => {
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { loadSettings(); }, []);
 
-  // 自动拉取可用模型列表（API Key + Base URL 就绪时）
+  // 自动拉取可用模型列表（API Key + Base URL 就绪时, 经主进程代理, 渲染层不直连发 key）
   useEffect(() => {
     const key = settings.ai_api_key.trim();
     const base = settings.ai_base_url.trim();
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    if (!key || !base) { setAvailableModels([]); return; }
+    if (!key || !base || key.includes('••')) { setAvailableModels([]); return; }
     const cacheKey = `${base}|||${key.slice(0, 8)}`;
     if (fetchedRef.current === cacheKey) return;
     let cancelled = false;
     const timer = setTimeout(async () => {
       setFetchingModels(true);
       try {
-        const res = await fetch(`${base}/models`, {
-          headers: { 'Authorization': `Bearer ${key}` },
-        });
-        if (!res.ok) throw new Error('fail');
-        const data = await res.json();
-        const ids = (data.data || []).map(m => m.id).filter(Boolean).sort();
+        const r = await window.electronAPI.getAIModels({ baseUrl: base, apiKey: key });
+        if (!r?.success) throw new Error(r?.error || 'fail');
+        const ids = r.models || [];
         if (!cancelled) { setAvailableModels(ids); fetchedRef.current = cacheKey; }
       } catch {
         if (!cancelled) setAvailableModels([]);
@@ -183,8 +180,14 @@ const SettingsPage = () => {
     try {
       setSaving(true);
       if (window.electronAPI) {
+        const masked = settings.ai_api_key.includes('••');
+        const keyToSave = masked
+          // 掩码未改动 → 保留已存 key
+          ? (await window.electronAPI.getSetting('ai_api_key', '')) || ''
+          : settings.ai_api_key;
+        const patch = { ...settings, ai_api_key: keyToSave };
         for (const k of ['ai_api_key', 'ai_base_url', 'ai_model', 'enable_ai_optimization']) {
-          await window.electronAPI.setSetting(k, settings[k]);
+          await window.electronAPI.setSetting(k, patch[k]);
         }
         toast.success('AI 设置保存成功');
       }
@@ -196,8 +199,14 @@ const SettingsPage = () => {
     if (!settings.ai_api_key.trim()) { toast.error('请先输入 API Key'); return; }
     setTesting(true);
     try {
+      // 掩码态 → 用主进程已存明文 key 测试
+      let realKey = settings.ai_api_key.trim();
+      if (realKey.includes('••')) {
+        realKey = (await window.electronAPI?.getSetting('ai_api_key', '')) || '';
+        if (!realKey) { toast.error('无法获取已保存的 API Key'); return; }
+      }
       const r = await window.electronAPI.checkAIStatus({
-        ai_api_key: settings.ai_api_key.trim(),
+        ai_api_key: realKey,
         ai_base_url: settings.ai_base_url.trim() || 'https://api.openai.com/v1',
         ai_model: settings.ai_model.trim() || 'gpt-3.5-turbo',
       });
@@ -318,7 +327,8 @@ const SettingsPage = () => {
 
               <Input label="API Key *" type="password" value={settings.ai_api_key}
                 onChange={e => setSettings(p => ({ ...p, ai_api_key: e.target.value }))}
-                placeholder="sk-..." />
+                placeholder="sk-..."
+                hint={settings.ai_api_key.includes('••') ? '已保存 (掩码显示), 重新输入可更换' : '用于 AI 文本优化, 加密存储在本地' } />
 
               <Input label="API Base URL" type="url" value={settings.ai_base_url}
                 onChange={e => setSettings(p => ({ ...p, ai_base_url: e.target.value }))}

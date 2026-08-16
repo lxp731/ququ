@@ -16,12 +16,10 @@ contextBridge.exposeInMainWorld('electronAPI', {
   closeWindow: () => ipcRenderer.invoke('close-window'),
 
   // 录音
-  startRecording: () => ipcRenderer.invoke('start-recording'),
-  stopRecording: () => ipcRenderer.invoke('stop-recording'),
   onToggleDictation: (cb) => on('toggle-dictation', cb),
 
   // FunASR
-  transcribeAudio: (data) => ipcRenderer.invoke('transcribe-audio', data),
+  transcribeAudio: (data, options) => ipcRenderer.invoke('transcribe-audio', data, options),
   checkFunASRStatus: () => ipcRenderer.invoke('check-funasr-status'),
   restartFunasrServer: () => ipcRenderer.invoke('restart-funasr-server'),
   checkModelFiles: () => ipcRenderer.invoke('check-model-files'),
@@ -30,6 +28,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   // AI
   processText: (text, mode) => ipcRenderer.invoke('process-text', text, mode),
   checkAIStatus: (config) => ipcRenderer.invoke('check-ai-status', config),
+  getAIModels: (config) => ipcRenderer.invoke('get-ai-models', config),
 
   // 剪贴板
   pasteText: (text) => ipcRenderer.invoke('paste-text', text),
@@ -43,6 +42,7 @@ contextBridge.exposeInMainWorld('electronAPI', {
   deleteTranscription: (id) => ipcRenderer.invoke('delete-transcription', id),
   clearAllTranscriptions: () => ipcRenderer.invoke('clear-all-transcriptions'),
   exportTranscriptions: (format) => ipcRenderer.invoke('export-transcriptions', format),
+  searchTranscriptions: (query, limit) => ipcRenderer.invoke('search-transcriptions', query, limit),
 
   // 设置
   getSetting: (key, def) => ipcRenderer.invoke('get-setting', key, def),
@@ -114,15 +114,6 @@ contextBridge.exposeInMainWorld('electronAPI', {
   moveFloatingWindow: (dx, dy) => ipcRenderer.invoke('move-floating-window', dx, dy),
   onFloatingPreedit: (cb) => on('floating-preedit-update', cb),
   onFloatingVisibility: (cb) => on('floating-visibility-change', cb),
-
-  // 中文
-  detectLanguage: (t) => ipcRenderer.invoke('detect-language', t),
-  segmentChinese: (t) => ipcRenderer.invoke('segment-chinese', t),
-  addPunctuation: (t) => ipcRenderer.invoke('add-punctuation', t),
-
-  // 音频
-  convertAudioFormat: (d, f) => ipcRenderer.invoke('convert-audio-format', d, f),
-  enhanceAudio: (d) => ipcRenderer.invoke('enhance-audio', d),
 
   // 性能
   getPerformanceStats: () => ipcRenderer.invoke('get-performance-stats'),

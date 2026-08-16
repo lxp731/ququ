@@ -41,8 +41,14 @@ def main():
         t.start()
         threads.append(t)
 
+    # 带超时 join: 网络挂起时不让启动流程永久阻塞 (daemon 线程会自行结束)
+    JOIN_TIMEOUT_S = 600
     for t in threads:
-        t.join()
+        t.join(timeout=JOIN_TIMEOUT_S)
+    alive = [t for t in threads if t.is_alive()]
+    if alive:
+        print(f"[download_models] 警告: {len(alive)} 个下载线程超时仍在运行, "
+              f"不阻塞启动 (模型可能未就绪)", flush=True)
 
     names = ["ASR", "VAD", "标点", "SenseVoice", "Streaming"]
     all_ok = True

@@ -31,6 +31,16 @@ const WIN_VK_MAP = {
   '5': 0x35, '6': 0x36, '7': 0x37, '8': 0x38, '9': 0x39,
 };
 
+// 检测 Python 所在平台的 C long 大小 (evdev input_event 布局依赖)
+// 64 位 Linux: long=8 → 24 字节; 32 位: long=4 → 16 字节
+function structCalcsizeLong() {
+  try {
+    const { execFileSync } = require('child_process');
+    const out = execFileSync('python3', ['-c', 'import struct; print(struct.calcsize("L"))'], { encoding: 'utf8', timeout: 5000 });
+    return parseInt(out.trim(), 10) || 8;
+  } catch (_) { return 8; }
+}
+
 class KeyWatcher {
   constructor(logger) {
     this.log = logger;
@@ -57,6 +67,11 @@ class KeyWatcher {
    * 格式: 'Ctrl+Shift+L' → { trigger: 'L', triggerCode: 38, mods: ['Ctrl','Shift'] }
    */
   _parseHotkey(hotkey) {
+    // 安全: 热键字符串白名单, 防止注入到生成的脚本字面量
+    if (typeof hotkey !== 'string' || !/^[A-Za-z0-9+]+$/.test(hotkey)) {
+      this.log?.warn?.('[KeyWatcher] 非法热键格式, 已拒绝:', hotkey);
+      return null;
+    }
     const parts = hotkey.split('+');
     const trigger = parts[parts.length - 1];
     const modNames = parts.slice(0, -1);
@@ -70,25 +85,27 @@ class KeyWatcher {
    */
   start(onKeyEvent, hotkey = 'Ctrl+Space') {
     if (this._child) return;
+    const parsed = this._parseHotkey(hotkey);
+    if (!parsed) { this.log?.error?.('[KeyWatcher] 热键格式非法:', hotkey); return; }
     this._onKeyEvent = onKeyEvent;
     this._hotkey = hotkey;
 
     if (process.platform === 'linux') {
-      this._startLinux();
+      this._startLinux(parsed);
     } else if (process.platform === 'win32') {
-      this._startWindows();
+      this._startWindows(parsed);
     } else {
       this.log?.info?.('[KeyWatcher] 当前平台不支持键盘监听');
     }
   }
 
   // ── Linux: evdev ──
-  _startLinux() {
+  _startLinux(parsed) {
     const devices = this._findKeyboards();
     if (devices.length === 0) { this.log?.error?.('[KeyWatcher] 找不到键盘设备'); return; }
     this.log?.info?.(`[KeyWatcher] 设备: ${devices.join(', ')}, 热键: ${this._hotkey}`);
 
-    const { trigger, modNames } = this._parseHotkey(this._hotkey);
+    const { trigger, modNames } = parsed;
     const triggerCode = EV_KEY_MAP[trigger];
     if (!triggerCode) { this.log?.error?.(`[KeyWatcher] 不支持的触发键: ${trigger}`); return; }
 
@@ -102,11 +119,17 @@ class KeyWatcher {
 
     const deviceList = JSON.stringify(devices);
     // 生成 Python dict 字面量（整数 key，非 JSON 字符串 key）
+    // 注: trigger/mod 均来自白名单映射表, 不存在注入面
     const watchItems = Object.entries(watch).map(([c, n]) => `${c}:'${n}'`).join(',');
+    // evdev input_event: timeval(long,long) + u16 type + u16 code + s32 value
+    // 64 位 Linux 上 long=8 字节 → 24 字节; 32 位为 16 字节, 需用对应格式
+    const structFmt = structCalcsizeLong() === 8 ? 'LLHHI' : 'llHHI';
     const script = `
 import struct, os, sys, select, json
 WATCH = {${watchItems}}
 devices = json.loads('''${deviceList}''')
+FMT = '${structFmt}'
+SIZE = struct.calcsize(FMT)
 fds = []
 for d in devices:
     try:
@@ -120,9 +143,9 @@ while True:
     try:
         ready, _, _ = select.select(fds, [], [])
         for fd in ready:
-            data = os.read(fd, 24)
-            if len(data) < 24: continue
-            tv_sec, tv_usec, typ, code, value = struct.unpack('LLHHI', data)
+            data = os.read(fd, SIZE)
+            if len(data) < SIZE: continue
+            tv_sec, tv_usec, typ, code, value = struct.unpack(FMT, data)
             if typ == 1 and code in WATCH:
                 if value == 1:
                     sys.stdout.write('down:' + WATCH[code] + '\\n')
@@ -142,10 +165,10 @@ while True:
   }
 
   // ── Windows: GetAsyncKeyState 轮询 ──
-  _startWindows() {
+  _startWindows(parsed) {
     this.log?.info?.(`[KeyWatcher] Windows 键盘监听启动, 热键: ${this._hotkey}`);
 
-    const { trigger, modNames } = this._parseHotkey(this._hotkey);
+    const { trigger, modNames } = parsed;
     const triggerVk = WIN_VK_MAP[trigger];
     if (!triggerVk) { this.log?.error?.(`[KeyWatcher] 不支持的触发键: ${trigger}`); return; }
 

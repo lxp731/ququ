@@ -19,8 +19,6 @@ export function mockElectronAPI(overrides = {}) {
     closeWindow: vi.fn().mockResolvedValue(true),
 
     // ── 录音 ──
-    startRecording: vi.fn().mockResolvedValue(true),
-    stopRecording: vi.fn().mockResolvedValue(true),
     onToggleDictation: vi.fn().mockReturnValue(() => {}),
 
     // ── FunASR ──
@@ -118,16 +116,11 @@ export function mockElectronAPI(overrides = {}) {
     onFloatingVisibility: vi.fn().mockReturnValue(() => {}),
 
     // ── 中文 ──
-    detectLanguage: vi.fn().mockResolvedValue({ language: 'zh-CN', confidence: 0.95 }),
-    segmentChinese: vi.fn().mockResolvedValue({ segments: [] }),
-    addPunctuation: vi.fn().mockResolvedValue({ text: '' }),
 
     // ── 热词 ──
     selectHotwordFile: vi.fn().mockResolvedValue({ canceled: true }),
 
     // ── 音频 ──
-    convertAudioFormat: vi.fn().mockResolvedValue({ success: true }),
-    enhanceAudio: vi.fn().mockResolvedValue({ success: true }),
 
     // ── 性能 ──
     getPerformanceStats: vi.fn().mockResolvedValue({}),

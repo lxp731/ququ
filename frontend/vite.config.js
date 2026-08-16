@@ -2,6 +2,10 @@ import { defineConfig } from 'vite'
 import react from '@vitejs/plugin-react'
 import tailwindcss from '@tailwindcss/vite'
 import path from 'path'
+import { readFileSync } from 'fs'
+
+// 版本号从 package.json 注入, 避免硬编码漂移
+const pkg = JSON.parse(readFileSync(path.resolve(__dirname, 'package.json'), 'utf-8'))
 
 export default defineConfig({
   plugins: [react(), tailwindcss()],
@@ -46,7 +50,7 @@ export default defineConfig({
     exclude: ['electron'],
   },
   define: {
-    __APP_VERSION__: JSON.stringify('1.0.0'),
+    __APP_VERSION__: JSON.stringify(pkg.version),
     __DEV__: JSON.stringify(process.env.NODE_ENV === 'development'),
   },
 })

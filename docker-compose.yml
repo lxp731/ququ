@@ -31,9 +31,11 @@ services:
   nginx:
     image: docker.io/library/nginx:alpine
     ports:
-      - "0.0.0.0:8000:80"
+      # 仅本机可访问: ASR 服务无鉴权, 暴露到局域网会泄露语音内容与 LLM API Key
+      - "127.0.0.1:8000:80"
     volumes:
       - ./nginx.conf:/etc/nginx/conf.d/default.conf:ro
     depends_on:
       - backend
     restart: unless-stopped
+    mem_limit: 128m

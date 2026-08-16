@@ -61,6 +61,12 @@ def _setup_logging():
             logging.StreamHandler(),
         ],
     )
+    # 安全: 日志文件含敏感上下文, 收紧为仅属主可读写
+    try:
+        os.chmod(log_path, 0o600)
+        os.chmod(log_dir, 0o700)
+    except OSError:
+        pass
 
 _setup_logging()
 logger = logging.getLogger("ququ.server")
@@ -71,8 +77,24 @@ FUNASR_HOST = os.environ.get("FUNASR_HOST", "0.0.0.0")
 FUNASR_PORT = int(os.environ.get("FUNASR_PORT", "8000"))
 FUNASR_DEVICE = os.environ.get("FUNASR_DEVICE", "cpu")
 
-logger.info("Server config: host=%s port=%d device=%s",
-            FUNASR_HOST, FUNASR_PORT, FUNASR_DEVICE)
+# ── 安全: CORS 白名单 (默认仅本机) ──
+_CORS_ORIGINS = [
+    o.strip() for o in os.environ.get(
+        "QUQU_CORS_ORIGINS",
+        "http://localhost:5173,http://127.0.0.1:5173,file://",
+    ).split(",") if o.strip()
+]
+
+# ── 安全: 音频/上传大小上限 ──
+MAX_AUDIO_BUFFER_BYTES = int(os.environ.get(
+    "QUQU_MAX_AUDIO_BUFFER", str(20 * 1024 * 1024)))   # 20MB ≈ 10min @16k
+MAX_UPLOAD_BYTES = int(os.environ.get(
+    "QUQU_MAX_UPLOAD", str(100 * 1024 * 1024)))          # 100MB
+MAX_WS_BINARY_BYTES = int(os.environ.get(
+    "QUQU_MAX_WS_BINARY", str(1024 * 1024)))             # 单块 1MB
+
+logger.info("Server config: host=%s port=%d device=%s cors=%s",
+            FUNASR_HOST, FUNASR_PORT, FUNASR_DEVICE, _CORS_ORIGINS)
 
 # ── 全局引擎 + Pipeline (懒加载) ────────────────────────
 
@@ -101,15 +123,22 @@ async def _handle_llm_config(cfg: dict):
 
     from llm_optimizer import LLMOptimizer
 
+    base_url = str(cfg.get("base_url", "http://localhost:8000/v1")).strip()
+    if not _is_valid_llm_url(base_url):
+        logger.warning("LLM base_url rejected (scheme/host not allowed): %s",
+                       base_url)
+        await _broadcast_error("LLM base_url 不合法: 仅允许 http/https")
+        return
+
     if _llm is None:
         _llm = LLMOptimizer(
-            base_url=cfg.get("base_url", "http://localhost:8000/v1"),
+            base_url=base_url,
             api_key=cfg.get("api_key", ""),
             model=cfg.get("model", "qwen2.5-7b-instruct"),
         )
     else:
         _llm.update_config(
-            base_url=cfg.get("base_url", _llm.base_url),
+            base_url=base_url,
             api_key=cfg.get("api_key", _llm.api_key),
             model=cfg.get("model", _llm.model),
         )
@@ -118,6 +147,32 @@ async def _handle_llm_config(cfg: dict):
         _pipeline.llm_optimizer = _llm
         _pipeline.buffer.set_llm_enabled(True)
     logger.info("LLM configured: %s @ %s", _llm.model, _llm.base_url)
+
+
+def _is_valid_llm_url(url: str) -> bool:
+    """SSRF 缓解: 仅允许 http/https, 且禁止元数据/链路本地地址。"""
+    try:
+        from urllib.parse import urlparse
+        parsed = urlparse(url)
+        if parsed.scheme not in ("http", "https"):
+            return False
+        host = (parsed.hostname or "").lower()
+        if not host:
+            return False
+        # 禁止链路本地 / 云元数据地址
+        import ipaddress
+        for blocked in ("169.254.169.254", "metadata.google.internal"):
+            if host == blocked:
+                return False
+        try:
+            addr = ipaddress.ip_address(host)
+            if addr.is_link_local or addr.is_multicast or addr.is_unspecified:
+                return False
+        except ValueError:
+            pass  # 域名, 放行 (DNS 解析层无法在此校验)
+        return True
+    except Exception:  # noqa: BLE001
+        return False
 
 
 async def _watch_hotword_file(path: str):
@@ -160,16 +215,26 @@ async def broadcast(message: dict):
     if not _clients:
         return
     dead = set()
-    for ws in _clients:
+    # 快照迭代: 避免并发连接增减导致 "Set changed size during iteration"
+    for ws in list(_clients):
         try:
             await ws.send_json(message)
         except Exception:  # noqa: BLE001
             dead.add(ws)
-    _clients -= dead
+    if dead:
+        _clients -= dead
+
+
+async def _broadcast_error(message: str):
+    await broadcast({"type": "error", "message": message})
 
 
 async def _get_engine():
-    """懒加载 ASR 引擎 (首次连接时初始化)。"""
+    """懒加载 ASR 引擎 (首次连接时初始化)。
+
+    模型加载是 CPU 密集同步操作, 必须移入 executor,
+    否则加载期间整个事件循环冻结 (所有 REST/WS 请求卡死)。
+    """
     global _engine, _pipeline
     if _engine is not None:
         return _engine, _pipeline
@@ -181,7 +246,9 @@ async def _get_engine():
         from asr_engine import ASREngine
         from pipeline import PTTPipeline
 
-        engine = ASREngine(device=FUNASR_DEVICE)
+        loop = asyncio.get_running_loop()
+        engine = await loop.run_in_executor(
+            None, lambda: ASREngine(device=FUNASR_DEVICE))
         pipeline = PTTPipeline(broadcast_fn=broadcast)
         pipeline.start_emergency_timer()
 
@@ -208,16 +275,25 @@ from fastapi.responses import JSONResponse
 
 @asynccontextmanager
 async def _lifespan(_app: FastAPI):
-    # 启动时后台预加载引擎
-    asyncio.create_task(_get_engine())
+    # 启动时后台预加载引擎 (异常仅记录, 不阻塞启动)
+    task = asyncio.create_task(_get_engine())
+
+    def _on_done(t: asyncio.Task):
+        if t.cancelled():
+            return
+        exc = t.exception()
+        if exc:
+            logger.error("Preload engine failed: %s", exc)
+
+    task.add_done_callback(_on_done)
     yield
 
 app = FastAPI(title="QuQu Speech Input", version="2.0.0", lifespan=_lifespan)
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
-    allow_methods=["*"],
-    allow_headers=["*"],
+    allow_origins=_CORS_ORIGINS,
+    allow_methods=["GET", "POST"],
+    allow_headers=["Content-Type", "Authorization"],
 )
 
 
@@ -272,6 +348,13 @@ async def transcribe_legacy(
     if not audio:
         return JSONResponse({"error": "No audio file"}, status_code=400)
 
+    # 上传大小上限, 防止内存 DoS
+    content = await audio.read(MAX_UPLOAD_BYTES + 1)
+    if len(content) > MAX_UPLOAD_BYTES:
+        return JSONResponse(
+            {"error": f"File too large (max {MAX_UPLOAD_BYTES // (1024 * 1024)}MB)"},
+            status_code=413)
+
     engine, _ = await _get_engine()
     if not engine.is_loaded:
         return JSONResponse(
@@ -281,13 +364,14 @@ async def transcribe_legacy(
         opts = json.loads(options)
     except json.JSONDecodeError:
         opts = {}
+    if not isinstance(opts, dict):
+        opts = {}
 
     # 保存临时文件
     import uuid
     tmp_path = os.path.join(
         tempfile.gettempdir(), f"ququ_upload_{uuid.uuid4().hex}.wav")
     try:
-        content = await audio.read()
         with open(tmp_path, "wb") as f:  # noqa: ASYNC230
             f.write(content)
 
@@ -364,6 +448,61 @@ async def cleanup():
     return {"status": "ok"}
 
 
+@app.post("/models/download")
+async def models_download():
+    """按需预下载/补全模型文件 (download_models.py)。
+
+    与容器 entrypoint 共用同一脚本; 已缓存模型会自动跳过。
+    """
+    if _engine is not None and _engine.is_loaded:
+        return {"success": True, "message": "models already loaded"}
+
+    script = os.path.join(os.path.dirname(os.path.abspath(__file__)),
+                          "download_models.py")
+    try:
+        proc = await asyncio.create_subprocess_exec(
+            sys.executable, script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        try:
+            stdout, stderr = await asyncio.wait_for(proc.communicate(), 3600)
+        except TimeoutError:
+            proc.kill()
+            await proc.wait()
+            return {"success": False, "error": "模型下载超时 (3600s)"}
+        if proc.returncode != 0:
+            tail = (stderr or b"").decode("utf-8", "replace")[-500:]
+            return {"success": False, "error": f"模型下载失败: {tail}"}
+        return {"success": True, "message": stdout.decode("utf-8", "replace")[-200:]}
+    except Exception as e:  # noqa: BLE001
+        logger.warning("models/download failed: %s", e)
+        return {"success": False, "error": str(e)}
+
+
+def _origin_allowed(origin: str) -> bool:
+    """WebSocket Origin 白名单: 空 (非浏览器客户端) 或本机开发/打包来源。"""
+    if not origin:
+        return True  # 非浏览器客户端 (Electron net / ws 库) 不携带 Origin
+    allowed = (
+        "http://localhost:5173", "http://127.0.0.1:5173",
+        "file://", "http://localhost", "http://127.0.0.1",
+    )
+    return origin.rstrip("/") in allowed
+
+
+def _valid_hotword_path(path: str) -> bool:
+    """热词文件路径校验: 必须是存在的常规文件, 且大小受限。"""
+    try:
+        p = Path(path).expanduser()
+        if not p.is_absolute():
+            return False
+        st = p.stat()
+        return p.is_file() and st.st_size <= 5 * 1024 * 1024
+    except OSError:
+        return False
+
+
 # ══════════════════════════════════════════════════════
 # WebSocket — 流式识别 + PTT 控制
 # ══════════════════════════════════════════════════════
@@ -372,6 +511,14 @@ async def cleanup():
 @app.websocket("/stream/ws")
 async def stream_ws(ws: WebSocket):
     global _clients  # noqa: PLW0602
+
+    # ── Origin 校验: 只接受本机应用来源, 防 CSWSH ──
+    origin = ws.headers.get("origin", "")
+    if not _origin_allowed(origin):
+        logger.warning("WebSocket rejected (origin not allowed): %r", origin)
+        await ws.close(code=1008)
+        return
+
     await ws.accept()
     _clients.add(ws)
 
@@ -426,10 +573,10 @@ async def stream_ws(ws: WebSocket):
 
                 if command == "start_listening":
                     # ★ 防重入
-                    if hasattr(engine, "_ptt_active") and engine._ptt_active:
+                    if engine.is_ptt_active():
                         logger.warning("start_listening ignored: already listening")
                         continue
-                    engine._ptt_active = True
+                    engine.set_ptt_active(True)
                     pipeline.reset()
                     engine.reset()
                     engine.start_processing()
@@ -437,7 +584,7 @@ async def stream_ws(ws: WebSocket):
                     logger.info("PTT: START")
 
                 elif command == "stop_listening":
-                    engine._ptt_active = False
+                    engine.set_ptt_active(False)
                     # 等待最后一次离线纠正
                     for _ in range(12):
                         if not engine.offline_busy:
@@ -467,13 +614,17 @@ async def stream_ws(ws: WebSocket):
                         _hotwords = hotwords
                         if engine is not None and hotwords:
                             engine.set_hotwords(hotwords)
-                        # 启动 inotify 文件监控
+                        # 启动 mtime 轮询文件监控 (路径安全校验)
                         if hotword_path and hotword_path != _hotword_path:
-                            _hotword_path = hotword_path
-                            if _hotword_watch_task is not None:
-                                _hotword_watch_task.cancel()
-                            _hotword_watch_task = asyncio.create_task(
-                                _watch_hotword_file(hotword_path))
+                            if _valid_hotword_path(hotword_path):
+                                _hotword_path = hotword_path
+                                if _hotword_watch_task is not None:
+                                    _hotword_watch_task.cancel()
+                                _hotword_watch_task = asyncio.create_task(
+                                    _watch_hotword_file(hotword_path))
+                            else:
+                                logger.warning(
+                                    "Hotword path rejected: %s", hotword_path)
                         logger.info("Hotwords updated: %d chars", len(hotwords))
                     await ws.send_json({"type": "config_ack"})
 
@@ -481,9 +632,13 @@ async def stream_ws(ws: WebSocket):
                     await ws.send_json({"type": "pong"})
 
             elif "bytes" in msg:
-                # Binary: PCM 音频块
-                if engine.is_loaded:
-                    await engine.process_audio(msg["bytes"])
+                # Binary: PCM 音频块 — 仅 PTT 激活期间接收, 且限制单块大小
+                if engine.is_ptt_active() and len(msg["bytes"]) <= MAX_WS_BINARY_BYTES:
+                    if engine.is_loaded:
+                        await engine.process_audio(msg["bytes"])
+                elif len(msg["bytes"]) > MAX_WS_BINARY_BYTES:
+                    logger.warning("Oversized WS binary dropped (%d bytes)",
+                                   len(msg["bytes"]))
                 total_bytes += len(msg["bytes"])
                 chunk_count += 1
 
@@ -496,8 +651,14 @@ async def stream_ws(ws: WebSocket):
         logger.error("WebSocket error: %s", traceback.format_exc())
     finally:
         _clients.discard(ws)
-        # 如果这是最后一个客户端, 清理引擎状态
+        # 如果这是最后一个客户端, 清理引擎状态 (含 PTT 标志, 防止重连后卡死)
         if not _clients and engine is not None:
+            try:
+                await engine.stop_processing()
+            except Exception:
+                logger.warning("stop_processing on disconnect failed",
+                               exc_info=True)
+            engine.set_ptt_active(False)
             engine.reset()
             if pipeline is not None:
                 pipeline.reset()

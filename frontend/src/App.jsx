@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useCallback, useRef } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { toast } from 'sonner';
-import { Mic, Settings, History, Copy, Sparkles, Keyboard, Timer, Type } from 'lucide-react';
+import { Mic, Settings, History, Copy, Keyboard, Timer, Type } from 'lucide-react';
 import './index.css';
 import { useHotkey } from './hooks/useHotkey';
 import { useStreamingRecording } from './hooks/useStreamingRecording';
@@ -213,8 +213,8 @@ const StreamingTextPanel = ({ green, yellow, red, isActive }) => {
 // ═══════════════════════════════════════════
 //  Text Display Panel
 // ═══════════════════════════════════════════
-const TextPanel = ({ original, processed, isOptimizing, onCopy }) => {
-  if (!original && !processed) return null;
+const TextPanel = ({ original, onCopy }) => {
+  if (!original) return null;
   return (
     <motion.div
       initial={{ opacity: 0, y: 20 }}
@@ -234,38 +234,6 @@ const TextPanel = ({ original, processed, isOptimizing, onCopy }) => {
           <p className="text-sm text-white/80 leading-relaxed">{original}</p>
         </div>
       )}
-
-      {/* AI Optimized */}
-      {(processed || isOptimizing) && (
-        <motion.div
-          initial={{ opacity: 0, y: 10 }}
-          animate={{ opacity: 1, y: 0 }}
-          className="glass-light p-4 border-indigo-400/20 group"
-        >
-          <div className="flex items-center justify-between mb-2">
-            <span className="flex items-center gap-1.5 text-[10px] uppercase tracking-widest text-indigo-300/70">
-              <Sparkles className="w-3 h-3" /> AI 优化
-            </span>
-            <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-              {processed && (
-                <button onClick={() => onCopy(processed)}
-                  className="p-1.5 rounded-lg hover:bg-indigo-500/20 transition-colors" title="复制">
-                  <Copy className="w-3.5 h-3.5 text-indigo-400/70" />
-                </button>
-              )}
-            </div>
-          </div>
-          {isOptimizing ? (
-            <div className="flex items-center gap-3 py-2">
-              <motion.div className="w-4 h-4 border-2 border-indigo-400/60 border-t-transparent rounded-full"
-                animate={{ rotate: 360 }} transition={{ duration: 1, repeat: Infinity, ease: 'linear' }} />
-              <span className="text-sm text-indigo-300/60">AI 正在优化文本...</span>
-            </div>
-          ) : (
-            <p className="text-sm text-white/90 leading-relaxed">{processed}</p>
-          )}
-        </motion.div>
-      )}
     </motion.div>
   );
 };
@@ -275,9 +243,11 @@ const TextPanel = ({ original, processed, isOptimizing, onCopy }) => {
 // ═══════════════════════════════════════════
 const SettingsPage = React.lazy(() => import('./settings.jsx'));
 
+// 模块级: 避免每次渲染构造 URLSearchParams
+const pageParams = new URLSearchParams(window.location.search);
+
 export default function App() {
-  const urlParams = new URLSearchParams(window.location.search);
-  if (urlParams.get('page') === 'settings') {
+  if (pageParams.get('page') === 'settings') {
     return (
       <React.Suspense fallback={<LoadingSpinner />}>
         <SettingsPage />
@@ -298,7 +268,6 @@ function LoadingSpinner() {
 function MainApp() {
 
   const [originalText, setOriginalText] = useState('');
-  const [processedText, setProcessedText] = useState('');
   const [isHovered, setIsHovered] = useState(false);
   const [recordingMode, setRecordingMode] = useState('toggle');
   const [isCapturingHotkey, setIsCapturingHotkey] = useState(false);
@@ -313,7 +282,6 @@ function MainApp() {
 
   const isRecordingActual = streamingRec.isRecording;
   const isRecProcessingActual = streamingRec.isProcessing;
-  const isOptimizing = streamingRec.isOptimizing;
   const streamingError = streamingRec.error;
 
   // 三区文字 (来自后端 preedit 广播)
@@ -326,18 +294,15 @@ function MainApp() {
 
   const { hotkey, rawHotkey, registerHotkey, unregisterHotkey, syncRecordingState } = useHotkey();
 
-  // Sync recording state
-  useEffect(() => {
-    syncRecordingState?.(streamingRec.isRecording);
-  }, [streamingRec.isRecording, syncRecordingState]);
-
   const lastPasteRef = useRef({ text: '', ts: 0 });
 
   // Load saved recording mode
   useEffect(() => {
-    window.electronAPI?.getSetting('recording_mode', 'toggle').then(setRecordingMode);
-    window.electronAPI?.getAppVersion().then(v => setAppVersion(v || ''));
-    window.electronAPI?.getSystemInfo().then(info => { if (info?.isPackaged) setIsPackaged(true); });
+    window.electronAPI?.getSetting('recording_mode', 'toggle').then(setRecordingMode).catch(() => {});
+    window.electronAPI?.getAppVersion().then(v => setAppVersion(v || '')).catch(() => {});
+    window.electronAPI?.getSystemInfo()
+      .then(info => { if (info?.isPackaged) setIsPackaged(true); })
+      .catch(() => {});
   }, []);
 
   // Safe paste with dedup
@@ -361,7 +326,6 @@ function MainApp() {
   // ── Pipeline callbacks (wire from useStreamingRecording) ──
   const handleStreamingText = useCallback((_fullText) => {
     setOriginalText(_fullText);
-    setProcessedText('');
     setPreeditGreen('');
     setPreeditYellow('');
     setPreeditRed('');
@@ -382,13 +346,11 @@ function MainApp() {
 
   const handleCommit = useCallback(async (text) => {
     setOriginalText(text);
-    setProcessedText('');
     await safePaste(text);
   }, [safePaste]);
 
   const handleFinal = useCallback(async (text) => {
     setOriginalText(text);
-    setProcessedText('');
     setPreeditGreen('');
     setPreeditYellow('');
     setPreeditRed('');
@@ -410,16 +372,15 @@ function MainApp() {
     toast.success(`热词文件已更新 (${count} 词)`);
   }, []);
 
-  // Wire callbacks to streaming hook
+  // Wire callbacks to streaming hook (hook 提供 setCallbacks, 不再写返回值属性)
   useEffect(() => {
-    // eslint-disable-next-line react-hooks/immutability -- _callbacks is a setter by design
-    streamingRec._callbacks = {
+    streamingRec.setCallbacks({
       onText: handleStreamingText,
       onPreedit: handlePreedit,
       onCommit: handleCommit,
       onFinal: handleFinal,
       onHotwordsUpdated: handleHotwordsUpdated,
-    };
+    });
   }, [streamingRec, handleStreamingText, handlePreedit, handleCommit, handleFinal, handleHotwordsUpdated]);
 
   // Toggle recording (must be before useEffect that references it)
@@ -475,7 +436,7 @@ function MainApp() {
     return () => { window.removeEventListener('keydown', handler, true); clearTimeout(t); };
   }, [isCapturingHotkey, rawHotkey, registerHotkey, unregisterHotkey]);
 
-  // 用 ref 避免闭包过期
+  // 用 ref 避免闭包过期 (最新值镜像)
   const isRecordingRef = useRef(isRecordingActual);
   const isRecProcessingRef = useRef(isRecProcessingActual);
   const startRef = useRef(startRecording);
@@ -543,7 +504,7 @@ function MainApp() {
   // Sync recording state to main process
   useEffect(() => { syncRecordingState?.(isRecordingActual); }, [isRecordingActual, syncRecordingState]);
 
-  const micState = isRecordingActual ? 'recording' : (isRecProcessingActual || isOptimizing) ? 'processing' : isHovered ? 'hover' : 'idle';
+  const micState = isRecordingActual ? 'recording' : isRecProcessingActual ? 'processing' : isHovered ? 'hover' : 'idle';
 
   return (
     <div className="min-h-screen animated-bg relative">
@@ -757,10 +718,7 @@ function MainApp() {
           {/* 最终结果 */}
           <TextPanel
             original={originalText}
-            processed={processedText}
-            isOptimizing={isOptimizing}
             onCopy={async (t) => { await window.electronAPI?.copyText(t); toast.success('已复制'); }}
-            onPaste={safePaste}
           />
         </div>
 

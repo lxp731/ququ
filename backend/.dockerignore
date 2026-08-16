@@ -1,0 +1,9 @@
+# 构建上下文排除: 避免数 GB .venv 上传到 Docker daemon
+.venv/
+__pycache__/
+*.pyc
+.ruff_cache/
+.pytest_cache/
+*.log
+.env
+uv.lock.bak

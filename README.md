@@ -51,10 +51,10 @@
 ```bash
 cd backend
 uv sync
-uv run python server.py --port 8000
+uv run python server.py
 ```
 
-访问 `http://127.0.0.1:8000/health` → `{"status":"ok"}` 即就绪。首次启动自动下载模型 (~2GB)。
+访问 `http://127.0.0.1:8000/health` → `{"status":"ok"}` 即就绪。首次启动自动下载模型 (~2GB)。端口由环境变量 `FUNASR_PORT` 控制（默认 8000）。
 
 #### 2. 启动前端
 

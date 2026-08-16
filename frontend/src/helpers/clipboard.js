@@ -59,17 +59,21 @@ class ClipboardManager {
   }
 
   _pasteLinux() {
-    // 确保 ydotoold 在运行
-    try {
-      const { execSync } = require('child_process');
-      execSync('pgrep -x ydotoold', { stdio: 'ignore' });
-    } catch {
-      // daemon 没运行，尝试启动
+    // 确保 ydotoold 在运行 (结果缓存, 避免每次粘贴都 execSync)
+    if (this._ydotoolChecked === undefined) {
+      this._ydotoolChecked = false;
       try {
-        const sock = '/run/user/' + process.getuid() + '/.ydotool_socket';
-        try { fs.unlinkSync(sock); } catch { /* ignore */ }
-        spawn('ydotoold', [], { detached: true, stdio: 'ignore' }).unref();
-      } catch { /* ignore */ }
+        const { execSync } = require('child_process');
+        execSync('pgrep -x ydotoold', { stdio: 'ignore' });
+        this._ydotoolChecked = true;
+      } catch {
+        // daemon 没运行，尝试启动
+        try {
+          const sock = '/run/user/' + process.getuid() + '/.ydotool_socket';
+          try { fs.unlinkSync(sock); } catch { /* ignore */ }
+          spawn('ydotoold', [], { detached: true, stdio: 'ignore' }).unref();
+        } catch { /* ignore */ }
+      }
     }
 
     const tools = this._detectPasteTools();
@@ -78,22 +82,39 @@ class ClipboardManager {
         const tryNext = (i) => {
           if (i >= tools.length) {
             this._log('⚠️ 无可用的粘贴工具，文字已在剪贴板中');
-            resolve({ success: true, pasted: false });
+            resolve({ success: false, pasted: false, error: '无可用的粘贴工具' });
             return;
           }
           const tool = tools[i];
           this._log('尝试粘贴: ' + tool.name);
           const proc = tool.paste();
+          let settled = false;
+          // 超时兜底: 工具挂起时避免 Promise 永久悬挂
+          const timer = setTimeout(() => {
+            if (settled) return;
+            settled = true;
+            try { proc.kill(); } catch { /* ignore */ }
+            this._log('粘贴超时: ' + tool.name);
+            tryNext(i + 1);
+          }, 3000);
+          const finish = (ok, extra) => {
+            if (settled) return;
+            settled = true;
+            clearTimeout(timer);
+            resolve({ success: ok, pasted: ok, tool: tool.name, ...extra });
+          };
           proc.on('close', (code) => {
+            if (settled) return;
             if (code === 0) {
               this._log('粘贴成功: ' + tool.name);
-              resolve({ success: true, pasted: true, tool: tool.name });
+              finish(true);
             } else {
               this._log('粘贴失败: ' + tool.name + ' (code=' + code + ')');
               tryNext(i + 1);
             }
           });
           proc.on('error', (e) => {
+            if (settled) return;
             this._log('粘贴错误: ' + tool.name + ' - ' + e.message);
             tryNext(i + 1);
           });
@@ -148,7 +169,13 @@ class ClipboardManager {
   }
 
   openSystemSettings() {
-    spawn('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility']);
+    // 仅 macOS 需要打开系统辅助功能设置; 其他平台无此入口
+    if (process.platform !== 'darwin') {
+      this._log('openSystemSettings: 仅 macOS 支持, 跳过');
+      return;
+    }
+    const proc = spawn('open', ['x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility']);
+    proc.on('error', (e) => this._log('打开系统设置失败: ' + e.message));
   }
 }
 
