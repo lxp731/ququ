@@ -65,7 +65,8 @@ jobs:
           python-version: '3.12'
 
       - name: Install uv
-        uses: astral-sh/setup-uv@v10
+        # setup-uv 不提供裸主版本 tag (v10 不存在), 需用完整版本号
+        uses: astral-sh/setup-uv@v10.0.1
 
       - name: Ruff lint
         run: cd backend && uvx ruff check *.py
