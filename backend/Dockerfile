@@ -11,8 +11,9 @@ ENV HTTPS_PROXY=""
 ENV no_proxy=""
 ENV NO_PROXY=""
 
-# uv 国内镜像
-ENV UV_INDEX_URL=https://pypi.tuna.tsinghua.edu.cn/simple
+# PyTorch CPU-only 索引 (与 uv.lock 记录的 registry 保持一致)
+# 注意: 不要覆盖 UV_INDEX_URL —— uv.lock 是用默认 PyPI (pypi.org) 解析的,
+# 改默认 index 会导致 uv 判定 lockfile 过期, `uv sync --locked` 构建失败
 ENV UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
 
 # 清华 APT 源
@@ -52,12 +53,22 @@ RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/
     sed -i 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' \
     /etc/apt/sources.list \
     && apt-get update && apt-get install -y --no-install-recommends \
-    libsndfile1 curl \
-    && rm -rf /var/lib/apt/lists/*
+    libsndfile1 \
+    && rm -rf /var/lib/apt/lists/* \
+    && useradd --create-home --uid 1000 ququ \
+    && mkdir -p /models /tmp/ququ_logs \
+    && chown -R ququ:ququ /models /tmp/ququ_logs
 
-# 从构建阶段复制 .venv 和应用代码
-COPY --from=builder /app/.venv /app/.venv
-COPY server.py asr_engine.py pipeline.py llm_optimizer.py download_models.py entrypoint.sh ./
+# 用 COPY --chown 直接写入属主, 避免 chown -R /app 触发 overlayfs copy-up
+# (会把 1.4GB 的 .venv 整份复制到新层, 镜像体积直接翻倍)
+COPY --chown=ququ:ququ --from=builder /app/.venv /app/.venv
+COPY --chown=ququ:ququ server.py asr_engine.py pipeline.py llm_optimizer.py download_models.py entrypoint.sh ./
+
+# 删除运行时不需要的 torch 测试/头文件/构建工具 (~195MB)
+RUN rm -rf /app/.venv/lib/python3.14/site-packages/torch/test \
+           /app/.venv/lib/python3.14/site-packages/torch/include \
+    && find /app/.venv/lib/python3.14/site-packages/torch/bin \
+        -type f ! -name 'torch_shm_manager' -delete
 
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
@@ -68,10 +79,6 @@ ENV QUQU_TMP_DIR=/tmp
 ENV FUNASR_HOST=0.0.0.0
 ENV FUNASR_PORT=8000
 
-# 非 root 运行 (最小权限; 模型缓存卷需属主与 uid 1000 一致)
-RUN useradd --create-home --uid 1000 ququ \
-    && mkdir -p /models /tmp/ququ_logs \
-    && chown -R ququ:ququ /models /tmp/ququ_logs /app
 USER ququ
 
 EXPOSE 8000
