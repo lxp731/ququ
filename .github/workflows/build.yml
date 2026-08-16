@@ -51,33 +51,13 @@ jobs:
       - name: Test
         run: cd frontend && pnpm test
 
-  # ── 质量门禁: 后端 lint + 集成测试 (无需模型) ──
-  backend-quality:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-    steps:
-      - name: Checkout
-        uses: actions/checkout@v7
-
-      - name: Setup Python
-        uses: actions/setup-python@v7
-        with:
-          python-version: '3.12'
-
-      - name: Install uv
-        # setup-uv 不提供裸主版本 tag (v10 不存在), 需用完整版本号
-        uses: astral-sh/setup-uv@v10.0.1
-
-      - name: Ruff lint
-        run: cd backend && uvx ruff check *.py
-
-      - name: Backend integration tests (no models)
-        run: cd backend && uv sync --frozen && uv run python test_phase1.py
+  # 注: 后端不在 CI 中构建/发布 — 用户通过容器自行运行 (docker compose up)。
+  # 因此不设后端 job (避免安装 torch/funasr 等 2GB+ 依赖或触发模型下载)。
 
   build-linux:
     runs-on: ubuntu-latest
     timeout-minutes: 60
-    needs: [frontend-quality, backend-quality]
+    needs: [frontend-quality]
 
     steps:
       - name: Checkout
