@@ -488,7 +488,9 @@ def _origin_allowed(origin: str) -> bool:
         "http://localhost:5173", "http://127.0.0.1:5173",
         "file://", "http://localhost", "http://127.0.0.1",
     )
-    return origin.rstrip("/") in allowed
+    # 归一化尾部斜杠; file:// 的 // 是协议分隔符, 不能 rstrip 掉 (否则变 file:)
+    normalized = "file://" if origin.startswith("file://") else origin.rstrip("/")
+    return normalized in allowed
 
 
 def _valid_hotword_path(path: str) -> bool:

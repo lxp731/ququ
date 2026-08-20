@@ -172,6 +172,15 @@ def test_app_loads():
     assert "/transcribe" in routes, f"Missing /transcribe, routes: {routes}"
     assert "/status" in routes, f"Missing /status, routes: {routes}"
     print("  ✅ FastAPI app loads OK, routes:", routes)
+
+    # WS Origin 白名单: 打包版前端 (file://) 必须放行
+    from server import _origin_allowed
+    assert _origin_allowed("") is True, "空 Origin (非浏览器客户端) 应放行"
+    assert _origin_allowed("http://localhost:5173") is True
+    assert _origin_allowed("http://localhost:5173/") is True, "尾部斜杠应归一化"
+    assert _origin_allowed("file://") is True, "file:// 被 rstrip 误删为 file: → 打包版被拒"
+    assert _origin_allowed("https://evil.example") is False, "外部来源必须拒绝"
+    print("  ✅ WS origin whitelist OK")
     return True
 
 
@@ -255,10 +264,14 @@ async def test_websocket():
                 pass
             print("  5.5 reset → completed (OK)")
 
-            # ping/pong
+            # ping/pong (引擎加载完成的 status 广播可能晚到, 跳过非 pong 消息)
             await ws.send(json.dumps({"command": "ping"}))
-            msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
-            assert msg["type"] == "pong", f"Expected pong, got: {msg}"
+            msg = None
+            for _ in range(10):
+                msg = json.loads(await asyncio.wait_for(ws.recv(), timeout=5))
+                if msg["type"] == "pong":
+                    break
+            assert msg and msg["type"] == "pong", f"Expected pong, got: {msg}"
             print("  5.6 ping/pong (OK)")
 
     finally:
