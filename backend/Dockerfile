@@ -16,10 +16,10 @@ ENV NO_PROXY=""
 # 改默认 index 会导致 uv 判定 lockfile 过期, `uv sync --locked` 构建失败
 ENV UV_EXTRA_INDEX_URL=https://download.pytorch.org/whl/cpu
 
-# 清华 APT 源
-RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' \
+# 阿里云 APT 源
+RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.aliyun.com/debian|g' \
     /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
-    sed -i 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' \
+    sed -i 's|http://deb.debian.org/debian|https://mirrors.aliyun.com/debian|g' \
     /etc/apt/sources.list
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
@@ -27,7 +27,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     && rm -rf /var/lib/apt/lists/*
 
 RUN pip install --no-cache-dir uv \
-    -i https://pypi.tuna.tsinghua.edu.cn/simple
+    -i https://mirrors.aliyun.com/pypi/simple
 
 ENV UV_LINK_MODE=copy
 
@@ -48,9 +48,9 @@ ENV HTTPS_PROXY=""
 ENV no_proxy=""
 ENV NO_PROXY=""
 
-RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' \
+RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.aliyun.com/debian|g' \
     /etc/apt/sources.list.d/debian.sources 2>/dev/null || \
-    sed -i 's|http://deb.debian.org/debian|https://mirrors.tuna.tsinghua.edu.cn/debian|g' \
+    sed -i 's|http://deb.debian.org/debian|https://mirrors.aliyun.com/debian|g' \
     /etc/apt/sources.list \
     && apt-get update && apt-get install -y --no-install-recommends \
     libsndfile1 \
