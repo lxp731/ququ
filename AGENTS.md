@@ -39,7 +39,6 @@ ququ/
 │   ├── test_phase1.py     # 集成测试
 │   ├── Dockerfile
 │   └── pyproject.toml     # uv 依赖管理
-├── nginx.conf             # 反向代理 (WS + HTTP 分流)
 └── docker-compose.yml     # Podman/Docker 编排
 ```
 

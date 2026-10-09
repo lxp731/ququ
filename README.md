@@ -117,7 +117,6 @@ ququ/
 │   ├── pipeline.py            # 三区管道 (CandidateBuffer + PTTPipeline)
 │   ├── llm_optimizer.py       # LLM 校对 (流式 OpenAI API)
 │   └── download_models.py     # 模型预下载
-├── nginx.conf
 └── docker-compose.yml
 ```
 

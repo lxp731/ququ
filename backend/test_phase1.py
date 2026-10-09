@@ -287,30 +287,6 @@ async def test_websocket():
     return True
 
 
-# ── Test 6: nginx config ──────────────────────────────
-
-def test_nginx_config():
-    """验证 nginx 配置正确。"""
-    nginx_conf = os.path.join(
-        os.path.dirname(os.path.abspath(__file__)),
-        "..", "nginx.conf"
-    )
-    try:
-        with open(nginx_conf) as f:
-            content = f.read()
-        assert "/stream/" in content, "Missing /stream/ route"
-        assert "ququ_backend" in content, "Missing ququ_backend upstream"
-        assert "Upgrade" in content, "Missing WebSocket upgrade headers"
-        # 只应有一个 upstream block (不再需要 ququ_streaming)
-        ups_count = content.count("upstream ")
-        assert ups_count == 1, (
-            f"Expected 1 upstream, found {ups_count}")
-        print("  ✅ nginx.conf: single upstream, WS upgrade configured")
-    except FileNotFoundError:
-        print("  ⚠️ nginx.conf not found (expected at project root)")
-    return True
-
-
 # ── Test 7: GPU detection ─────────────────────────────
 
 def test_gpu_detection():
@@ -344,7 +320,6 @@ async def main():
         ("Pipeline buffer logic", test_pipeline_buffer),
         ("Pipeline commit logic", test_pipeline_commit),
         ("FastAPI app loads", test_app_loads),
-        ("nginx config", test_nginx_config),
         ("GPU detection", test_gpu_detection),
     ]
 

@@ -49,7 +49,7 @@ podman compose logs -f backend
 | `pipeline.py` | `CandidateBuffer` (三区管道) + `PTTPipeline` — 绿区提交、LLM 润色、终审 |
 | `llm_optimizer.py` | `LLMOptimizer` — 流式 OpenAI 兼容 API，关思考梯子，上下文 prompt |
 | `download_models.py` | `snapshot_download` 预下载 5 模型，`python server.py` 启动时自动调用 |
-| `test_phase1.py` | 集成测试 (引擎/管道/WS/nginx)，`uv run python test_phase1.py` |
+| `test_phase1.py` | 集成测试 (引擎/管道/WS)，`uv run python test_phase1.py` |
 
 ## 环境变量
 
