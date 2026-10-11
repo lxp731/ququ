@@ -53,7 +53,7 @@ RUN sed -i 's|http://deb.debian.org/debian|https://mirrors.aliyun.com/debian|g' 
     sed -i 's|http://deb.debian.org/debian|https://mirrors.aliyun.com/debian|g' \
     /etc/apt/sources.list \
     && apt-get update && apt-get install -y --no-install-recommends \
-    libsndfile1 \
+    libsndfile1 curl \
     && rm -rf /var/lib/apt/lists/* \
     && useradd --create-home --uid 1000 ququ \
     && mkdir -p /models /tmp/ququ_logs \
