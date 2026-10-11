@@ -158,3 +158,4 @@ temp/
 docker-compose.override.yml
 
 .vs/
+.agent/
