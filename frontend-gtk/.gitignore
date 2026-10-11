@@ -1,0 +1,13 @@
+# Python
+__pycache__/
+*.pyc
+.venv/
+*.egg-info/
+dist/
+build/
+
+# 运行时数据（由应用生成）
+*.db
+*.db-wal
+*.db-shm
+logs/

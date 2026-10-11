@@ -1,0 +1,37 @@
+[project]
+name = "ququ-frontend-gtk"
+version = "0.1.0"
+description = "蛐蛐 (QuQu) 轻量级 GTK 前端 — 替代 Electron 壳，对接 FunASR 后端"
+requires-python = ">=3.10"
+dependencies = [
+    "websocket-client>=1.8.0",
+]
+
+[project.optional-dependencies]
+# 历史导出 docx / pdf（可选）
+export = [
+    "python-docx>=1.1.0",
+    "reportlab>=4.0.0",
+]
+# 开发
+dev = [
+    "ruff>=0.16.0",
+]
+
+[project.scripts]
+ququ-gtk = "ququ_frontend.__main__:main"
+
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/ququ_frontend"]
+
+[tool.ruff]
+line-length = 100
+target-version = "py310"
+
+[tool.ruff.lint]
+select = ["E", "F", "W", "I", "UP", "B"]
+ignore = ["E501", "B008"]
