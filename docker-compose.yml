@@ -1,11 +1,13 @@
 services:
-  backend:
+  ququ:
     build:
       context: ./backend
       dockerfile: Dockerfile
     image: ququ-backend:latest
+    container_name: ququ
+    userns_mode: "keep-id:uid=1000,gid=1000"
     volumes:
-      # 挂载主机模型缓存目录，避免重复下载（~1.2GB + streaming ~200MB + SenseVoice ~450MB）
+      # 挂载主机模型缓存目录，避免重复下载
       - ${HOME}/.cache/modelscope:/models
     environment:
       # 清除宿主机注入的代理变量
@@ -20,8 +22,9 @@ services:
       # 设备选择 (auto 自动检测 GPU, 或 cpu / cuda)
       # FUNASR_DEVICE: "auto"
     ports:
-      # 仅本机可访问: ASR 服务无鉴权, 暴露到局域网会泄露语音内容与 LLM API Key
       - "127.0.0.1:8000:8000"
+    networks:
+      - ququ
     restart: unless-stopped
     mem_limit: 5g
     healthcheck:
@@ -30,3 +33,8 @@ services:
       timeout: 5s
       retries: 5
       start_period: 600s
+
+networks:
+  ququ:
+    name: ququ
+    driver: bridge
