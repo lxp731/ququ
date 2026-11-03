@@ -4,6 +4,7 @@ services:
       context: ./backend
       dockerfile: Dockerfile
     image: ququ-backend:latest
+    # image: registry.cn-hangzhou.aliyuncs.com/knight731/ququ-backend:1.2.4
     container_name: ququ
     userns_mode: "keep-id:uid=1000,gid=1000"
     volumes:
